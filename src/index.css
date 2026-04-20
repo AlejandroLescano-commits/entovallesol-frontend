@@ -1,0 +1,51 @@
+@import 'bootstrap/dist/css/bootstrap.min.css';
+
+:root {
+  --vs-green:       #166534;
+  --vs-green-light: #4ade80;
+  --vs-green-dark:  #14532d;
+  --vs-green-bg:    #f0fdf4;
+  --vs-sidebar-bg:  #0f3d20;
+  --vs-sidebar-hover: #1a5c30;
+  --vs-radius:      12px;
+}
+
+body { font-family: 'DM Sans', sans-serif; background: #f9fafb; }
+
+.vs-sidebar {
+  width: 220px;
+  min-height: 100vh;
+  background: var(--vs-sidebar-bg);
+  display: flex;
+  flex-direction: column;
+}
+.vs-sidebar .nav-link {
+  color: rgba(255,255,255,.7);
+  border-radius: 8px;
+  margin: 2px 8px;
+  padding: 8px 12px;
+  font-size: .85rem;
+  transition: background .15s, color .15s;
+}
+.vs-sidebar .nav-link:hover,
+.vs-sidebar .nav-link.active {
+  background: var(--vs-sidebar-hover);
+  color: #fff;
+}
+.vs-navbar { background: #fff; border-bottom: 1px solid #e5e7eb; }
+.vs-card   { border: 1px solid #e5e7eb; border-radius: var(--vs-radius); background: #fff; }
+.vs-btn-primary {
+  background: var(--vs-green);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 500;
+  transition: background .2s;
+}
+.vs-btn-primary:hover:not(:disabled) { background: var(--vs-green-dark); color: #fff; }
+.vs-btn-primary:disabled { opacity: .65; }
+.vs-badge-role {
+  font-size: .7rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
