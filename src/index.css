@@ -1,51 +1,139 @@
-@import 'bootstrap/dist/css/bootstrap.min.css';
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 :root {
-  --vs-green:       #166534;
-  --vs-green-light: #4ade80;
+  --vs-green:       #4ade80;
   --vs-green-dark:  #14532d;
-  --vs-green-bg:    #f0fdf4;
-  --vs-sidebar-bg:  #0f3d20;
-  --vs-sidebar-hover: #1a5c30;
-  --vs-radius:      12px;
+  --vs-sidebar-bg:  #0f1f14;
+  --vs-navbar-h:    52px;
+  --vs-sidebar-w:   220px;
 }
 
-body { font-family: 'DM Sans', sans-serif; background: #f9fafb; }
+* { box-sizing: border-box; }
 
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #f9fafb;
+  margin: 0;
+}
+
+/* ── Sidebar ── */
 .vs-sidebar {
-  width: 220px;
+  width: var(--vs-sidebar-w);
   min-height: 100vh;
   background: var(--vs-sidebar-bg);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
+
 .vs-sidebar .nav-link {
-  color: rgba(255,255,255,.7);
-  border-radius: 8px;
-  margin: 2px 8px;
-  padding: 8px 12px;
-  font-size: .85rem;
+  color: rgba(255,255,255,.65);
+  font-size: .82rem;
+  padding: .45rem 1rem;
+  border-radius: 6px;
+  margin: 1px 8px;
   transition: background .15s, color .15s;
 }
-.vs-sidebar .nav-link:hover,
+
+.vs-sidebar .nav-link:hover {
+  background: rgba(255,255,255,.07);
+  color: #fff;
+}
+
 .vs-sidebar .nav-link.active {
-  background: var(--vs-sidebar-hover);
-  color: #fff;
-}
-.vs-navbar { background: #fff; border-bottom: 1px solid #e5e7eb; }
-.vs-card   { border: 1px solid #e5e7eb; border-radius: var(--vs-radius); background: #fff; }
-.vs-btn-primary {
-  background: var(--vs-green);
-  border: none;
-  border-radius: 10px;
-  color: #fff;
+  background: rgba(74,222,128,.15);
+  color: var(--vs-green);
   font-weight: 500;
-  transition: background .2s;
 }
-.vs-btn-primary:hover:not(:disabled) { background: var(--vs-green-dark); color: #fff; }
-.vs-btn-primary:disabled { opacity: .65; }
+
+/* ── Navbar ── */
+.vs-navbar {
+  height: var(--vs-navbar-h);
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+/* ── Badge rol ── */
 .vs-badge-role {
-  font-size: .7rem;
-  padding: 2px 8px;
-  border-radius: 999px;
+  font-size: .68rem;
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-weight: 500;
 }
+
+/* ── Cards ── */
+.vs-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.vs-stat-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  transition: box-shadow .2s;
+}
+
+.vs-stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,.06);
+}
+
+/* ── Tabla ── */
+.vs-table thead th {
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.vs-table tbody td {
+  font-size: .85rem;
+  vertical-align: middle;
+  border-color: #f3f4f6;
+}
+
+.vs-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+/* ── Page header ── */
+.vs-page-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.5rem;
+  color: #111827;
+}
+
+/* ── Botón verde ── */
+.btn-vs {
+  background: var(--vs-green-dark);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: .85rem;
+  padding: .45rem 1rem;
+  transition: opacity .15s;
+}
+.btn-vs:hover { opacity: .88; color: #fff; }
+
+/* ── Spinner overlay ── */
+.vs-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+}
+
+/* ── Predicción badge tendencia ── */
+.badge-creciente  { background: #dcfce7; color: #14532d; }
+.badge-decreciente{ background: #fee2e2; color: #991b1b; }

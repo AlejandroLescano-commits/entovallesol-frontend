@@ -13,6 +13,7 @@ import ReportesPage from '@/pages/reportes/ReportesPage'
 import ImportacionPage from '@/pages/importacion/ImportacionPage'
 import UsuariosPage from '@/pages/usuarios/UsuariosPage'
 import ConfiguracionPage from '@/pages/configuracion/ConfiguracionPage'
+import PrediccionPage from '@/pages/prediccion/PrediccionPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -25,17 +26,18 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard"                element={<DashboardPage />} />
-        <Route path="produccion/sitotroga"     element={<SitotrogaPage />} />
-        <Route path="produccion/trichogramma"  element={<TrichogrammaPage />} />
-        <Route path="produccion/galleria"      element={<GalleriaPage />} />
-        <Route path="produccion/paratheresia"  element={<ParathesiaPage />} />
-        <Route path="distribucion"             element={<DistribucionPage />} />
-        <Route path="inventario"               element={<InventarioPage />} />
-        <Route path="reportes"                 element={<ReportesPage />} />
-        <Route path="importacion"              element={<ImportacionPage />} />
-        <Route path="usuarios"                 element={<UsuariosPage />} />
-        <Route path="configuracion"            element={<ConfiguracionPage />} />
+        <Route path="dashboard"               element={<DashboardPage />} />
+        <Route path="produccion/sitotroga"    element={<SitotrogaPage />} />
+        <Route path="produccion/trichogramma" element={<TrichogrammaPage />} />
+        <Route path="produccion/galleria"     element={<GalleriaPage />} />
+        <Route path="produccion/paratheresia" element={<ParathesiaPage />} />
+        <Route path="distribucion"            element={<DistribucionPage />} />
+        <Route path="inventario"              element={<InventarioPage />} />
+        <Route path="reportes"                element={<ReportesPage />} />
+        <Route path="importacion"             element={<ImportacionPage />} />
+        <Route path="usuarios"                element={<UsuariosPage />} />
+        <Route path="configuracion"           element={<ConfiguracionPage />} />
+        <Route path="prediccion"              element={<PrediccionPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

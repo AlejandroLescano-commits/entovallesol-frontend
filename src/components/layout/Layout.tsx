@@ -4,7 +4,6 @@ import Navbar from './Navbar'
 import { useTokenRefreshTimer } from '@/hooks/useAuth'
 
 export default function Layout() {
-  // Renueva silenciosamente el access token antes de que expire
   useTokenRefreshTimer()
 
   return (
