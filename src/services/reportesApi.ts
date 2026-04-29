@@ -6,20 +6,7 @@ const excel = async (url: string, params: object, filename: string) => {
   saveAs(res.data, filename);
 };
 
-// ── Producción ────────────────────────────────────────────────────────────────
-export const descargarExcelSitotroga = (fi: string, ff: string) =>
-  excel("/reportes/excel/sitotroga", { fecha_inicio: fi, fecha_fin: ff }, `sitotroga_${fi}_${ff}.xlsx`);
-
-export const descargarExcelTrichogramma = (fi: string, ff: string) =>
-  excel("/reportes/excel/trichogramma", { fecha_inicio: fi, fecha_fin: ff }, `trichogramma_${fi}_${ff}.xlsx`);
-
-export const descargarExcelGalleria = (fi: string, ff: string) =>
-  excel("/reportes/excel/galleria", { fecha_inicio: fi, fecha_fin: ff }, `galleria_${fi}_${ff}.xlsx`);
-
-export const descargarExcelParatheresia = (fi: string, ff: string) =>
-  excel("/reportes/excel/paratheresia", { fecha_inicio: fi, fecha_fin: ff }, `paratheresia_${fi}_${ff}.xlsx`);
-
-// ── Notas de Salida ───────────────────────────────────────────────────────────
+// ── Notas de Salida (rango de fechas) ────────────────────────────────────────
 export const descargarExcelNotasSitodroga = (fi: string, ff: string) =>
   excel("/reportes/excel/notas/sitodroga", { fecha_inicio: fi, fecha_fin: ff }, `notas_sitodroga_${fi}_${ff}.xlsx`);
 
@@ -31,3 +18,17 @@ export const descargarExcelNotasMoscas = (fi: string, ff: string) =>
 
 export const descargarExcelNotasGalleria = (fi: string, ff: string) =>
   excel("/reportes/excel/notas/galleria", { fecha_inicio: fi, fecha_fin: ff }, `notas_galleria_${fi}_${ff}.xlsx`);
+
+// ── Producción Mensual (mes + año) ───────────────────────────────────────────
+// ── Producción Mensual ────────────────────────────────────────────────────────
+export const descargarExcelSitotroga = (mes: number, anio: number) =>
+  excel("/reportes/excel/sitotroga/mensual", { mes, anio }, `sitotroga_${anio}_${String(mes).padStart(2,'0')}.xlsx`);
+
+export const descargarExcelTrichogramma = (mes: number, anio: number) =>
+  excel("/reportes/excel/trichogramma/mensual", { mes, anio }, `trichogramma_${anio}_${String(mes).padStart(2,'0')}.xlsx`);
+
+export const descargarExcelParatheresia = (mes: number, anio: number) =>
+  excel("/reportes/excel/paratheresia/mensual", { mes, anio }, `paratheresia_${anio}_${String(mes).padStart(2,'0')}.xlsx`);
+
+export const descargarExcelGalleria = (mes: number, anio: number) =>
+  excel("/reportes/excel/galleria/mensual", { mes, anio }, `galleria_${anio}_${String(mes).padStart(2,'0')}.xlsx`);
