@@ -1,2 +1,3 @@
 redeploy n1
 redeploy n2
+redeploy n3
