@@ -48,6 +48,7 @@ export default function GalleriaPage() {
   const [showNotaModal, setShowNotaModal] = useState(false)
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
   const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' })
+  const [ratioCustom, setRatioCustom] = useState(false)
 
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
@@ -55,18 +56,35 @@ export default function GalleriaPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
-    crear.mutate({ ...form, cantidad: Number(form.cantidad), id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
-      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } })
+    crear.mutate(
+      { ...form, cantidad: Number(form.cantidad), id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
+      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } }
+    )
   }
 
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    crearNota.mutate({
-      ...notaForm, cantidad: Number(notaForm.cantidad),
-      ratio: notaForm.ratio ? Number(notaForm.ratio) : null,
-      id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
-    }, { onSuccess: () => setShowNotaModal(false) })
+    crearNota.mutate(
+      {
+        ...notaForm,
+        cantidad: Number(notaForm.cantidad),
+        ratio: notaForm.ratio ? Number(notaForm.ratio) : null,
+        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
+      },
+      {
+        onSuccess: () => {
+          setShowNotaModal(false)
+          setNotaForm({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' })
+          setRatioCustom(false)
+        }
+      }
+    )
   }
+
+  const parejasEstimadas =
+    notaForm.tiposalida === 'Paratheresia' && notaForm.ratio && notaForm.cantidad
+      ? Math.floor(Number(notaForm.cantidad) / Number(notaForm.ratio))
+      : null
 
   return (
     <div>
@@ -142,6 +160,7 @@ export default function GalleriaPage() {
         </div>
       )}
 
+      {/* Modal: Nuevo registro de producción */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
@@ -151,15 +170,21 @@ export default function GalleriaPage() {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Cantidad *</label>
-                  <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Unidad</label>
+                <div>
+                  <label className="form-label fw-semibold">Fecha *</label>
+                  <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="form-label fw-semibold">Cantidad *</label>
+                  <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="form-label fw-semibold">Unidad</label>
                   <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
                     <option value="">— Seleccionar —</option>
                     {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                  </select></div>
+                  </select>
+                </div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
@@ -169,41 +194,86 @@ export default function GalleriaPage() {
           </div></div>
         </div>
       )}
+
+      {/* Modal: Nota de Salida */}
       {showNotaModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
             <div className="modal-header">
               <h5 className="modal-title">Nota de Salida — Galleria</h5>
-              <button className="btn-close" onClick={() => setShowNotaModal(false)} />
+              <button className="btn-close" onClick={() => { setShowNotaModal(false); setRatioCustom(false) }} />
             </div>
             <form onSubmit={handleNotaSubmit}>
               <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Tipo de salida</label>
+                <div>
+                  <label className="form-label fw-semibold">Fecha *</label>
+                  <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="form-label fw-semibold">Tipo de salida</label>
                   <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value }))}>
                     <option value="Paratheresia">Paratheresia</option>
                     <option value="Instalacion">Instalación</option>
                     <option value="Ventas">Ventas</option>
-                  </select></div>
+                  </select>
+                </div>
+
                 {notaForm.tiposalida === 'Paratheresia' && (
-                  <div><label className="form-label fw-semibold">Ratio (3 / 3.5 / 4)</label>
-                    <select className="form-select" value={notaForm.ratio} onChange={e => setNotaForm(f => ({ ...f, ratio: e.target.value }))}>
+                  <div>
+                    <label className="form-label fw-semibold">Ratio</label>
+                    <select
+                      className="form-select"
+                      value={ratioCustom ? 'custom' : notaForm.ratio}
+                      onChange={e => {
+                        if (e.target.value === 'custom') {
+                          setRatioCustom(true)
+                          setNotaForm(f => ({ ...f, ratio: '' }))
+                        } else {
+                          setRatioCustom(false)
+                          setNotaForm(f => ({ ...f, ratio: e.target.value }))
+                        }
+                      }}
+                    >
                       <option value="">— Seleccionar —</option>
                       <option value="3">3</option>
                       <option value="3.5">3.5</option>
                       <option value="4">4</option>
+                      <option value="custom">Otro (ingresar manual)</option>
                     </select>
-                    <small className="text-muted">Parejas = floor(cantidad / ratio)</small>
+
+                    {ratioCustom && (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        className="form-control mt-2"
+                        placeholder="Ingresa el ratio..."
+                        value={notaForm.ratio}
+                        onChange={e => setNotaForm(f => ({ ...f, ratio: e.target.value }))}
+                      />
+                    )}
+
+                    <small className="text-muted d-block mt-1">Parejas = floor(cantidad / ratio)</small>
+
+                    {parejasEstimadas !== null && (
+                      <div className="alert alert-success py-1 px-2 mt-2 mb-0" style={{ fontSize: '.85rem' }}>
+                        Parejas estimadas: <strong>{parejasEstimadas}</strong>
+                      </div>
+                    )}
                   </div>
                 )}
-                <div><label className="form-label fw-semibold">Cantidad *</label>
-                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Descripción</label>
-                  <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
+
+                <div>
+                  <label className="form-label fw-semibold">Cantidad *</label>
+                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="form-label fw-semibold">Descripción</label>
+                  <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} />
+                </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowNotaModal(false); setRatioCustom(false) }}>Cancelar</button>
                 <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </form>
