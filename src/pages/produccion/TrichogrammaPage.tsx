@@ -48,25 +48,49 @@ export default function TrichogrammaPage() {
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
-  const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' })
+  const [notaForm, setNotaForm] = useState({
+    fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: ''
+  })
 
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
 
+  const esParasitacion = notaForm.tiposalida === 'Parasitacion'
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
-    crear.mutate({ ...form, cantidad: Number(form.cantidad), id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
-      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } })
+    // Planchas × 80 = pulg²
+    crear.mutate(
+      {
+        ...form,
+        cantidad: Number(form.cantidad) * 80,
+        id_unidad: form.id_unidad ? Number(form.id_unidad) : null
+      },
+      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } }
+    )
   }
 
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!notaForm.fecha || !notaForm.cantidad) return toast.error('Completa los campos requeridos')
+
+    // Parasitación: planchas × 31 = pulg²; demás: directo en pulg²
+    const cantidadFinal = esParasitacion
+      ? Number(notaForm.cantidad) * 31
+      : Number(notaForm.cantidad)
+
     crearNota.mutate({
-      ...notaForm, cantidad: Number(notaForm.cantidad),
+      ...notaForm,
+      cantidad: cantidadFinal,
       id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
       id_lugarliberacion: notaForm.id_lugarliberacion ? Number(notaForm.id_lugarliberacion) : null,
-    }, { onSuccess: () => setShowNotaModal(false) })
+    }, {
+      onSuccess: () => {
+        setShowNotaModal(false)
+        setNotaForm({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' })
+      }
+    })
   }
 
   return (
@@ -97,44 +121,74 @@ export default function TrichogrammaPage() {
         </li>
       </ul>
 
+      {/* Tabla producción */}
       {tab === 'produccion' && (
         <div className="vs-card">
           {isLoading
             ? <div className="vs-spinner"><div className="spinner-border text-success" /></div>
-            : <table className="table vs-table mb-0">
-                <thead><tr><th style={{ width: 48 }}>#</th><th>Fecha</th><th>Cantidad (pulg²)</th><th>Activo</th></tr></thead>
-                <tbody>
-                  {prodPag.slice.length === 0
-                    ? <tr><td colSpan={4} className="text-center text-muted py-4">Sin registros</td></tr>
-                    : prodPag.slice.map((r: any, index: number) => (
-                        <tr key={r.id}>
-                          <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
-                          <td>{r.fecha}</td><td>{r.cantidad}</td>
-                          <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
-                        </tr>
-                      ))
-                  }
-                </tbody>
-              </table>
+            : <>
+                <table className="table vs-table mb-0">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 48 }}>#</th>
+                      <th>Fecha</th>
+                      <th>Cantidad (pulg²)</th>
+                      <th>Activo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prodPag.slice.length === 0
+                      ? <tr><td colSpan={4} className="text-center text-muted py-4">Sin registros</td></tr>
+                      : prodPag.slice.map((r: any, index: number) => (
+                          <tr key={r.id}>
+                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>
+                              {(prodPag.page - 1) * PAGE_SIZE + index + 1}
+                            </td>
+                            <td>{r.fecha}</td>
+                            <td>{r.cantidad.toLocaleString('es-PE', { maximumFractionDigits: 2 })}</td>
+                            <td>
+                              <span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>
+                                {r.activo ? 'Sí' : 'No'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                    }
+                  </tbody>
+                </table>
+                <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
+              </>
           }
-          <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
         </div>
       )}
 
+      {/* Tabla notas */}
       {tab === 'notas' && (
         <div className="vs-card">
           <table className="table vs-table mb-0">
-            <thead><tr><th style={{ width: 48 }}>#</th><th>Fecha</th><th>Tipo</th><th>Lugar</th><th>Cantidad</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 48 }}>#</th>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Lugar</th>
+                <th>Cantidad (pulg²)</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
             <tbody>
               {notasPag.slice.length === 0
-                ? <tr><td colSpan={5} className="text-center text-muted py-4">Sin notas</td></tr>
+                ? <tr><td colSpan={6} className="text-center text-muted py-4">Sin notas</td></tr>
                 : notasPag.slice.map((n: any, index: number) => (
                     <tr key={n.id}>
-                      <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(notasPag.page - 1) * PAGE_SIZE + index + 1}</td>
+                      <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>
+                        {(notasPag.page - 1) * PAGE_SIZE + index + 1}
+                      </td>
                       <td>{n.fecha}</td>
                       <td><span className="badge bg-primary">{n.tiposalida}</span></td>
                       <td>{lugares.find((l: any) => l.id === n.id_lugarliberacion)?.nombre ?? '—'}</td>
-                      <td>{n.cantidad}</td>
+                      <td>{Number(n.cantidad).toLocaleString('es-PE', { maximumFractionDigits: 2 })}</td>
+                      <td>{n.descripcion ?? '—'}</td>
                     </tr>
                   ))
               }
@@ -144,66 +198,123 @@ export default function TrichogrammaPage() {
         </div>
       )}
 
+      {/* Modal producción */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Nuevo registro — Trichogramma</h5>
-              <button className="btn-close" onClick={() => setShowModal(false)} />
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Nuevo registro — Trichogramma</h5>
+                <button className="btn-close" onClick={() => setShowModal(false)} />
+              </div>
+              <form onSubmit={handleSubmit}>
+                <div className="modal-body d-flex flex-column gap-3">
+                  <div>
+                    <label className="form-label fw-semibold">Fecha *</label>
+                    <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required />
+                  </div>
+                  <div>
+                    <label className="form-label fw-semibold">Planchas *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      value={form.cantidad}
+                      onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))}
+                      required
+                    />
+                    {form.cantidad && (
+                      <small className="text-muted mt-1 d-block">
+                        = <strong>{(Number(form.cantidad) * 80).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg²</strong> guardados
+                      </small>
+                    )}
+                  </div>
+                  <div>
+                    <label className="form-label fw-semibold">Unidad</label>
+                    <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
+                      <option value="">— Seleccionar —</option>
+                      {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                  <button type="submit" className="btn-vs btn" disabled={crear.isPending}>
+                    {crear.isPending ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Cantidad (pulg²) *</label>
-                  <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Unidad</label>
-                  <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
-                    <option value="">— Seleccionar —</option>
-                    {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                  </select></div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
-              </div>
-            </form>
-          </div></div>
+          </div>
         </div>
       )}
+
+      {/* Modal nota salida */}
       {showNotaModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Nota de Salida — Trichogramma</h5>
-              <button className="btn-close" onClick={() => setShowNotaModal(false)} />
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Nota de Salida — Trichogramma</h5>
+                <button className="btn-close" onClick={() => setShowNotaModal(false)} />
+              </div>
+              <form onSubmit={handleNotaSubmit}>
+                <div className="modal-body d-flex flex-column gap-3">
+                  <div>
+                    <label className="form-label fw-semibold">Fecha *</label>
+                    <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required />
+                  </div>
+                  <div>
+                    <label className="form-label fw-semibold">Tipo de salida</label>
+                    <select
+                      className="form-select"
+                      value={notaForm.tiposalida}
+                      onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value, cantidad: '' }))}
+                    >
+                      <option value="Parasitacion">Parasitación</option>
+                      <option value="Liberacion">Liberación</option>
+                      <option value="Ventas">Ventas</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label fw-semibold">Lugar de liberación</label>
+                    <select className="form-select" value={notaForm.id_lugarliberacion} onChange={e => setNotaForm(f => ({ ...f, id_lugarliberacion: e.target.value }))}>
+                      <option value="">— Seleccionar —</option>
+                      {lugares.map((l: any) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label fw-semibold">
+                      {esParasitacion ? 'Planchas *' : 'Cantidad (pulg²) *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      value={notaForm.cantidad}
+                      onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))}
+                      required
+                    />
+                    {esParasitacion && notaForm.cantidad && (
+                      <small className="text-muted mt-1 d-block">
+                        = <strong>{(Number(notaForm.cantidad) * 31).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg²</strong> descontados
+                      </small>
+                    )}
+                  </div>
+                  <div>
+                    <label className="form-label fw-semibold">Descripción</label>
+                    <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
+                  <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>
+                    {crearNota.isPending ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
             </div>
-            <form onSubmit={handleNotaSubmit}>
-              <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Tipo de salida</label>
-                  <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value }))}>
-                    <option value="Parasitacion">Parasitación</option>
-                    <option value="Liberacion">Liberación</option>
-                    <option value="Ventas">Ventas</option>
-                  </select></div>
-                <div><label className="form-label fw-semibold">Lugar de liberación</label>
-                  <select className="form-select" value={notaForm.id_lugarliberacion} onChange={e => setNotaForm(f => ({ ...f, id_lugarliberacion: e.target.value }))}>
-                    <option value="">— Seleccionar —</option>
-                    {lugares.map((l: any) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-                  </select></div>
-                <div><label className="form-label fw-semibold">Cantidad *</label>
-                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Descripción</label>
-                  <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
-              </div>
-            </form>
-          </div></div>
+          </div>
         </div>
       )}
     </div>
