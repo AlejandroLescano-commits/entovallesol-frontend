@@ -55,6 +55,12 @@ export default function SitotrogaPage() {
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
 
+  const esExiguum = notaForm.tiposalida === 'T.exiguum'
+
+  const cantidadConvertida = esExiguum && notaForm.cantidad
+    ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor || 0)
+    : null
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
@@ -67,9 +73,25 @@ export default function SitotrogaPage() {
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!notaForm.fecha || !notaForm.cantidad) return toast.error('Completa los campos requeridos')
+    if (esExiguum && !notaForm.factor) return toast.error('El factor es obligatorio para T.exiguum')
+
+    const cantidadFinal = esExiguum
+      ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor)
+      : Number(notaForm.cantidad)
+
     crearNota.mutate(
-      { ...notaForm, cantidad: Number(notaForm.cantidad), factor: Number(notaForm.factor), id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null },
-      { onSuccess: () => { setShowNotaModal(false); setNotaForm({ fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' }) } }
+      {
+        ...notaForm,
+        cantidad: cantidadFinal,
+        factor: esExiguum ? Number(notaForm.factor) : 1,
+        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null
+      },
+      {
+        onSuccess: () => {
+          setShowNotaModal(false)
+          setNotaForm({ fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' })
+        }
+      }
     )
   }
 
@@ -171,7 +193,7 @@ export default function SitotrogaPage() {
                       <td>{n.fecha}</td>
                       <td><span className="badge bg-primary">{n.tiposalida}</span></td>
                       <td>{n.cantidad}</td>
-                      <td>{n.factor}</td>
+                      <td>{n.tiposalida === 'T.exiguum' ? n.factor : '—'}</td>
                       <td>{n.descripcion ?? '—'}</td>
                     </tr>
                   ))
@@ -236,26 +258,77 @@ export default function SitotrogaPage() {
                     <label className="form-label fw-semibold">Fecha *</label>
                     <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required />
                   </div>
+
                   <div>
                     <label className="form-label fw-semibold">Tipo de salida *</label>
-                    <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value }))}>
+                    <select
+                      className="form-select"
+                      value={notaForm.tiposalida}
+                      onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value, factor: '1', cantidad: '' }))}
+                    >
                       <option value="T.exiguum">T. exiguum</option>
                       <option value="T.pretiosum">T. pretiosum</option>
+                      <option value="Crysopas">Crysopas</option>
                       <option value="Infestación">Infestación</option>
                       <option value="Ventas">Ventas</option>
                     </select>
                   </div>
+
                   <div>
-                    <label className="form-label fw-semibold">Cantidad (g) *</label>
-                    <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
+                    <label className="form-label fw-semibold">
+                      {esExiguum ? 'Planchas *' : 'Cantidad (g) *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      value={notaForm.cantidad}
+                      onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))}
+                      required
+                    />
+                    {esExiguum && notaForm.cantidad && (
+                      <small className="text-muted mt-1 d-block">
+                        = {cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g descontados de Sitotroga
+                      </small>
+                    )}
                   </div>
-                  <div>
-                    <label className="form-label fw-semibold">Factor</label>
-                    <input type="number" step="0.01" className="form-control" value={notaForm.factor} onChange={e => setNotaForm(f => ({ ...f, factor: e.target.value }))} />
-                  </div>
+
+                  {esExiguum && (
+                    <div>
+                      <label className="form-label fw-semibold">Factor *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="form-control"
+                        value={notaForm.factor}
+                        onChange={e => setNotaForm(f => ({ ...f, factor: e.target.value }))}
+                        required
+                      />
+                      <small className="text-muted mt-1 d-block">
+                        Fórmula: planchas × 12.5 + factor = gramos
+                        {notaForm.cantidad && (
+                          <> → <strong>{cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g</strong></>
+                        )}
+                      </small>
+                      {notaForm.cantidad && (
+                        <small className="text-success mt-1 d-block fw-semibold">
+                          También suma {(Number(notaForm.cantidad) * 80).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg² al saldo de Trichogramma
+                        </small>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label className="form-label fw-semibold">Descripción</label>
                     <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} />
+                  </div>
+
+                  <div>
+                    <label className="form-label fw-semibold">Unidad de medida</label>
+                    <select className="form-select" value={notaForm.id_unidad} onChange={e => setNotaForm(f => ({ ...f, id_unidad: e.target.value }))}>
+                      <option value="">— Seleccionar —</option>
+                      {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                    </select>
                   </div>
                 </div>
                 <div className="modal-footer">
