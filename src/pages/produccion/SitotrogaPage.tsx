@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { useSitotroga, useCreateSitotroga, useNotasSitodroga, useCreateNotaSitodroga, useUnidadesSitodroga } from '@/hooks/useProduccion'
+import {
+  useSitotroga, useCreateSitotroga, useAnularSitotroga,
+  useNotasSitodroga, useCreateNotaSitodroga, useAnularNotaSitodroga,
+  useUnidadesSitodroga,
+} from '@/hooks/useProduccion'
 import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
@@ -36,16 +40,38 @@ function Pagination({ page, total, setPage }: { page: number; total: number; set
   )
 }
 
+function ConfirmModal({ mensaje, onConfirm, onCancel }: { mensaje: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }}>
+      <div className="modal-dialog modal-sm modal-dialog-centered">
+        <div className="modal-content">
+          <div className="modal-header border-0 pb-0">
+            <h6 className="modal-title fw-bold text-danger">⚠ Confirmar anulación</h6>
+          </div>
+          <div className="modal-body pt-2" style={{ fontSize: '.88rem' }}>{mensaje}</div>
+          <div className="modal-footer border-0 pt-0 gap-2">
+            <button className="btn btn-sm btn-secondary" onClick={onCancel}>Cancelar</button>
+            <button className="btn btn-sm btn-danger" onClick={onConfirm}>Anular</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SitotrogaPage() {
   const { data: registros = [], isLoading } = useSitotroga()
   const { data: notas = [] } = useNotasSitodroga()
   const { data: unidades = [] } = useUnidadesSitodroga()
   const crear = useCreateSitotroga()
   const crearNota = useCreateNotaSitodroga()
+  const anular = useAnularSitotroga()
+  const anularNota = useAnularNotaSitodroga()
 
   const [tab, setTab] = useState<'produccion' | 'notas'>('produccion')
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
+  const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota'; mensaje: string } | null>(null)
 
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
   const [notaForm, setNotaForm] = useState({
@@ -56,7 +82,6 @@ export default function SitotrogaPage() {
   const notasPag = usePagination(notas)
 
   const esExiguum = notaForm.tiposalida === 'T.exiguum'
-
   const cantidadConvertida = esExiguum && notaForm.cantidad
     ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor || 0)
     : null
@@ -84,7 +109,7 @@ export default function SitotrogaPage() {
         ...notaForm,
         cantidad: cantidadFinal,
         factor: esExiguum ? Number(notaForm.factor) : 1,
-        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null
+        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
       },
       {
         onSuccess: () => {
@@ -95,9 +120,33 @@ export default function SitotrogaPage() {
     )
   }
 
+  const pedirConfirm = (id: number, tipo: 'produccion' | 'nota', extra?: string) => {
+    const base = tipo === 'produccion'
+      ? 'Se anulará este registro de producción.'
+      : 'Se anulará esta nota de salida.'
+    const aviso = extra ? ` ${extra}` : ''
+    setConfirm({ id, tipo, mensaje: base + aviso })
+  }
+
+  const ejecutarAnulacion = () => {
+    if (!confirm) return
+    if (confirm.tipo === 'produccion') {
+      anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    } else {
+      anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    }
+  }
+
   return (
     <div>
-      {/* Header */}
+      {confirm && (
+        <ConfirmModal
+          mensaje={confirm.mensaje}
+          onConfirm={ejecutarAnulacion}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="vs-page-title mb-0">Sitotroga cerealella</h1>
@@ -109,7 +158,6 @@ export default function SitotrogaPage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <ul className="nav nav-tabs mb-3">
         <li className="nav-item">
           <button className={`nav-link ${tab === 'produccion' ? 'active' : ''}`} onClick={() => { setTab('produccion'); prodPag.setPage(1) }}>
@@ -125,7 +173,6 @@ export default function SitotrogaPage() {
         </li>
       </ul>
 
-      {/* Tabla producción */}
       {tab === 'produccion' && (
         <div className="vs-card">
           {isLoading
@@ -139,23 +186,30 @@ export default function SitotrogaPage() {
                       <th>Cantidad (g)</th>
                       <th>Unidad</th>
                       <th>Activo</th>
+                      <th style={{ width: 90 }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {prodPag.slice.length === 0
-                      ? <tr><td colSpan={5} className="text-center text-muted py-4">Sin registros</td></tr>
+                      ? <tr><td colSpan={6} className="text-center text-muted py-4">Sin registros</td></tr>
                       : prodPag.slice.map((r: any, index: number) => (
                           <tr key={r.id}>
-                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>
-                              {(prodPag.page - 1) * PAGE_SIZE + index + 1}
-                            </td>
+                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
                             <td>{r.fecha}</td>
                             <td>{r.cantidad}</td>
                             <td>{r.id_unidad ?? '—'}</td>
+                            <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
                             <td>
-                              <span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>
-                                {r.activo ? 'Sí' : 'No'}
-                              </span>
+                              {r.activo && (
+                                <button
+                                  className="btn btn-sm btn-outline-danger"
+                                  style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                                  disabled={anular.isPending}
+                                  onClick={() => pedirConfirm(r.id, 'produccion')}
+                                >
+                                  Anular
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))
@@ -168,7 +222,6 @@ export default function SitotrogaPage() {
         </div>
       )}
 
-      {/* Tabla notas */}
       {tab === 'notas' && (
         <div className="vs-card">
           <table className="table vs-table mb-0">
@@ -180,21 +233,41 @@ export default function SitotrogaPage() {
                 <th>Cantidad</th>
                 <th>Factor</th>
                 <th>Descripción</th>
+                <th>Activo</th>
+                <th style={{ width: 90 }}></th>
               </tr>
             </thead>
             <tbody>
               {notasPag.slice.length === 0
-                ? <tr><td colSpan={6} className="text-center text-muted py-4">Sin notas</td></tr>
+                ? <tr><td colSpan={8} className="text-center text-muted py-4">Sin notas</td></tr>
                 : notasPag.slice.map((n: any, index: number) => (
                     <tr key={n.id}>
-                      <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>
-                        {(notasPag.page - 1) * PAGE_SIZE + index + 1}
-                      </td>
+                      <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(notasPag.page - 1) * PAGE_SIZE + index + 1}</td>
                       <td>{n.fecha}</td>
                       <td><span className="badge bg-primary">{n.tiposalida}</span></td>
                       <td>{n.cantidad}</td>
                       <td>{n.tiposalida === 'T.exiguum' ? n.factor : '—'}</td>
                       <td>{n.descripcion ?? '—'}</td>
+                      <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
+                      <td>
+                        {n.activo && (
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                            disabled={anularNota.isPending}
+                            onClick={() =>
+                              pedirConfirm(
+                                n.id, 'nota',
+                                n.tiposalida === 'T.exiguum'
+                                  ? 'También se revertirá el registro de Trichogramma generado.'
+                                  : ''
+                              )
+                            }
+                          >
+                            Anular
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))
               }
@@ -233,9 +306,7 @@ export default function SitotrogaPage() {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn-vs btn" disabled={crear.isPending}>
-                    {crear.isPending ? 'Guardando...' : 'Guardar'}
-                  </button>
+                  <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
                 </div>
               </form>
             </div>
@@ -258,7 +329,6 @@ export default function SitotrogaPage() {
                     <label className="form-label fw-semibold">Fecha *</label>
                     <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required />
                   </div>
-
                   <div>
                     <label className="form-label fw-semibold">Tipo de salida *</label>
                     <select
@@ -273,42 +343,22 @@ export default function SitotrogaPage() {
                       <option value="Ventas">Ventas</option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="form-label fw-semibold">
-                      {esExiguum ? 'Planchas *' : 'Cantidad (g) *'}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-control"
-                      value={notaForm.cantidad}
-                      onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))}
-                      required
-                    />
+                    <label className="form-label fw-semibold">{esExiguum ? 'Planchas *' : 'Cantidad (g) *'}</label>
+                    <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
                     {esExiguum && notaForm.cantidad && (
                       <small className="text-muted mt-1 d-block">
                         = {cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g descontados de Sitotroga
                       </small>
                     )}
                   </div>
-
                   {esExiguum && (
                     <div>
                       <label className="form-label fw-semibold">Factor *</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="form-control"
-                        value={notaForm.factor}
-                        onChange={e => setNotaForm(f => ({ ...f, factor: e.target.value }))}
-                        required
-                      />
+                      <input type="number" step="0.01" className="form-control" value={notaForm.factor} onChange={e => setNotaForm(f => ({ ...f, factor: e.target.value }))} required />
                       <small className="text-muted mt-1 d-block">
                         Fórmula: planchas × 12.5 + factor = gramos
-                        {notaForm.cantidad && (
-                          <> → <strong>{cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g</strong></>
-                        )}
+                        {notaForm.cantidad && (<> → <strong>{cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g</strong></>)}
                       </small>
                       {notaForm.cantidad && (
                         <small className="text-success mt-1 d-block fw-semibold">
@@ -317,12 +367,10 @@ export default function SitotrogaPage() {
                       )}
                     </div>
                   )}
-
                   <div>
                     <label className="form-label fw-semibold">Descripción</label>
                     <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} />
                   </div>
-
                   <div>
                     <label className="form-label fw-semibold">Unidad de medida</label>
                     <select className="form-select" value={notaForm.id_unidad} onChange={e => setNotaForm(f => ({ ...f, id_unidad: e.target.value }))}>
@@ -333,9 +381,7 @@ export default function SitotrogaPage() {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>
-                    {crearNota.isPending ? 'Guardando...' : 'Guardar'}
-                  </button>
+                  <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
                 </div>
               </form>
             </div>
