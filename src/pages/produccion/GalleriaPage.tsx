@@ -55,6 +55,41 @@ function ConfirmModal({ mensaje, onConfirm, onCancel }: { mensaje: string; onCon
   )
 }
 
+function DetailModal({ title, fields, onClose }: { title: string; fields: { label: string; value: any }[]; onClose: () => void }) {
+  const fmt = (v: string | null | undefined) =>
+    v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : null
+  return (
+    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }} onClick={onClose}>
+      <div className="modal-dialog modal-dialog-centered" onClick={e => e.stopPropagation()}>
+        <div className="modal-content">
+          <div className="modal-header" style={{ borderBottom: '2px solid #e5e7eb' }}>
+            <h5 className="modal-title fw-bold" style={{ fontSize: '.95rem' }}>🔍 {title}</h5>
+            <button className="btn-close" onClick={onClose} />
+          </div>
+          <div className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
+            <dl className="row mb-0" style={{ rowGap: '.4rem' }}>
+              {fields.map(({ label, value }) => (
+                <>
+                  <dt key={`dt-${label}`} className="col-sm-5 mb-0" style={{ fontSize: '.8rem', color: '#6b7280', fontWeight: 500 }}>{label}</dt>
+                  <dd key={`dd-${label}`} className="col-sm-7 mb-0" style={{ fontSize: '.88rem', color: value != null && value !== '' ? '#111827' : '#9ca3af' }}>
+                    {value != null && value !== '' ? value : '—'}
+                  </dd>
+                </>
+              ))}
+            </dl>
+          </div>
+          <div className="modal-footer" style={{ borderTop: '1px solid #f3f4f6' }}>
+            <button className="btn btn-secondary btn-sm" onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const fmt = (v: string | null | undefined) =>
+  v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : null
+
 export default function GalleriaPage() {
   const { data: registros = [], isLoading } = useGalleria()
   const { data: notas = [] } = useNotasGalleria()
@@ -68,6 +103,7 @@ export default function GalleriaPage() {
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
   const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota'; mensaje: string } | null>(null)
+  const [detail, setDetail] = useState<{ data: any; tipo: 'produccion' | 'nota' } | null>(null)
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
   const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' })
   const [ratioCustom, setRatioCustom] = useState(false)
@@ -87,43 +123,57 @@ export default function GalleriaPage() {
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     crearNota.mutate(
-      {
-        ...notaForm,
-        cantidad: Number(notaForm.cantidad),
-        ratio: notaForm.ratio ? Number(notaForm.ratio) : null,
-        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
-      },
-      {
-        onSuccess: () => {
-          setShowNotaModal(false)
-          setNotaForm({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' })
-          setRatioCustom(false)
-        }
-      }
+      { ...notaForm, cantidad: Number(notaForm.cantidad), ratio: notaForm.ratio ? Number(notaForm.ratio) : null, id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null },
+      { onSuccess: () => { setShowNotaModal(false); setNotaForm({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' }); setRatioCustom(false) } }
     )
   }
 
   const ejecutarAnulacion = () => {
     if (!confirm) return
-    if (confirm.tipo === 'produccion') {
-      anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
-    } else {
-      anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
-    }
+    if (confirm.tipo === 'produccion') anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    else anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
   }
 
   const parejasEstimadas =
     notaForm.tiposalida === 'Paratheresia' && notaForm.ratio && notaForm.cantidad
-      ? Math.floor(Number(notaForm.cantidad) / Number(notaForm.ratio))
-      : null
+      ? Math.floor(Number(notaForm.cantidad) / Number(notaForm.ratio)) : null
+
+  const detailFields = detail
+    ? detail.tipo === 'produccion'
+      ? [
+          { label: 'ID', value: detail.data.id },
+          { label: 'Fecha', value: detail.data.fecha },
+          { label: 'Cantidad', value: detail.data.cantidad },
+          { label: 'Unidad', value: detail.data.id_unidad },
+          { label: 'Estado', value: detail.data.activo ? '✅ Activo' : '❌ Anulado' },
+          { label: 'Registrado por', value: detail.data.registrado_por },
+          { label: 'Creado en', value: fmt(detail.data.creado_en) },
+          { label: 'Anulado por', value: detail.data.anulado_por },
+          { label: 'Anulado en', value: fmt(detail.data.anulado_en) },
+        ]
+      : [
+          { label: 'ID', value: detail.data.id },
+          { label: 'Fecha', value: detail.data.fecha },
+          { label: 'Tipo de salida', value: detail.data.tiposalida },
+          { label: 'Cantidad', value: detail.data.cantidad },
+          { label: 'Ratio', value: detail.data.ratio },
+          { label: 'Descripción', value: detail.data.descripcion },
+          { label: 'Estado', value: detail.data.activo ? '✅ Activo' : '❌ Anulado' },
+          { label: 'Registrado por', value: detail.data.registrado_por },
+          { label: 'Creado en', value: fmt(detail.data.creado_en) },
+          { label: 'Anulado por', value: detail.data.anulado_por },
+          { label: 'Anulado en', value: fmt(detail.data.anulado_en) },
+        ]
+    : []
 
   return (
     <div>
-      {confirm && (
-        <ConfirmModal
-          mensaje={confirm.mensaje}
-          onConfirm={ejecutarAnulacion}
-          onCancel={() => setConfirm(null)}
+      {confirm && <ConfirmModal mensaje={confirm.mensaje} onConfirm={ejecutarAnulacion} onCancel={() => setConfirm(null)} />}
+      {detail && (
+        <DetailModal
+          title={detail.tipo === 'produccion' ? 'Detalle — Producción Galleria' : 'Detalle — Nota de Salida Galleria'}
+          fields={detailFields}
+          onClose={() => setDetail(null)}
         />
       )}
 
@@ -141,14 +191,12 @@ export default function GalleriaPage() {
       <ul className="nav nav-tabs mb-3">
         <li className="nav-item">
           <button className={`nav-link ${tab === 'produccion' ? 'active' : ''}`} onClick={() => { setTab('produccion'); prodPag.setPage(1) }}>
-            Producción
-            <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{registros.length}</span>
+            Producción <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{registros.length}</span>
           </button>
         </li>
         <li className="nav-item">
           <button className={`nav-link ${tab === 'notas' ? 'active' : ''}`} onClick={() => { setTab('notas'); notasPag.setPage(1) }}>
-            Notas de Salida
-            <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{notas.length}</span>
+            Notas de Salida <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{notas.length}</span>
           </button>
         </li>
       </ul>
@@ -165,7 +213,7 @@ export default function GalleriaPage() {
                       <th>Fecha</th>
                       <th>Cantidad</th>
                       <th>Activo</th>
-                      <th style={{ width: 90 }}></th>
+                      <th style={{ width: 110 }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -177,16 +225,20 @@ export default function GalleriaPage() {
                             <td>{r.fecha}</td>
                             <td>{r.cantidad}</td>
                             <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
-                            <td>
+                            <td className="d-flex gap-1">
+                              <button
+                                className="btn btn-sm btn-outline-secondary"
+                                style={{ fontSize: '.72rem', padding: '2px 7px' }}
+                                title="Ver detalle"
+                                onClick={() => setDetail({ data: r, tipo: 'produccion' })}
+                              >👁</button>
                               {r.activo && (
                                 <button
                                   className="btn btn-sm btn-outline-danger"
                                   style={{ fontSize: '.72rem', padding: '2px 8px' }}
                                   disabled={anular.isPending}
                                   onClick={() => setConfirm({ id: r.id, tipo: 'produccion', mensaje: 'Se anulará este registro de producción de Galleria.' })}
-                                >
-                                  Anular
-                                </button>
+                                >Anular</button>
                               )}
                             </td>
                           </tr>
@@ -212,7 +264,7 @@ export default function GalleriaPage() {
                 <th>Ratio</th>
                 <th>Descripción</th>
                 <th>Activo</th>
-                <th style={{ width: 90 }}></th>
+                <th style={{ width: 110 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -227,16 +279,20 @@ export default function GalleriaPage() {
                       <td>{n.ratio ?? '—'}</td>
                       <td>{n.descripcion ?? '—'}</td>
                       <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
-                      <td>
+                      <td className="d-flex gap-1">
+                        <button
+                          className="btn btn-sm btn-outline-secondary"
+                          style={{ fontSize: '.72rem', padding: '2px 7px' }}
+                          title="Ver detalle"
+                          onClick={() => setDetail({ data: n, tipo: 'nota' })}
+                        >👁</button>
                         {n.activo && (
                           <button
                             className="btn btn-sm btn-outline-danger"
                             style={{ fontSize: '.72rem', padding: '2px 8px' }}
                             disabled={anularNota.isPending}
                             onClick={() => setConfirm({ id: n.id, tipo: 'nota', mensaje: 'Se anulará esta nota de salida de Galleria.' })}
-                          >
-                            Anular
-                          </button>
+                          >Anular</button>
                         )}
                       </td>
                     </tr>
@@ -248,7 +304,6 @@ export default function GalleriaPage() {
         </div>
       )}
 
-      {/* Modal producción — sin cambios */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
@@ -258,21 +313,15 @@ export default function GalleriaPage() {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body d-flex flex-column gap-3">
-                <div>
-                  <label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required />
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Cantidad *</label>
-                  <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required />
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Unidad</label>
+                <div><label className="form-label fw-semibold">Fecha *</label>
+                  <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Cantidad *</label>
+                  <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Unidad</label>
                   <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
                     <option value="">— Seleccionar —</option>
                     {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                  </select>
-                </div>
+                  </select></div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
@@ -283,7 +332,6 @@ export default function GalleriaPage() {
         </div>
       )}
 
-      {/* Modal nota salida — sin cambios */}
       {showNotaModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
@@ -293,54 +341,32 @@ export default function GalleriaPage() {
             </div>
             <form onSubmit={handleNotaSubmit}>
               <div className="modal-body d-flex flex-column gap-3">
-                <div>
-                  <label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required />
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Tipo de salida</label>
+                <div><label className="form-label fw-semibold">Fecha *</label>
+                  <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Tipo de salida</label>
                   <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value }))}>
                     <option value="Paratheresia">Paratheresia</option>
                     <option value="Instalacion">Instalación</option>
                     <option value="Ventas">Ventas</option>
-                  </select>
-                </div>
+                  </select></div>
                 {notaForm.tiposalida === 'Paratheresia' && (
                   <div>
                     <label className="form-label fw-semibold">Ratio</label>
-                    <select
-                      className="form-select"
-                      value={ratioCustom ? 'custom' : notaForm.ratio}
-                      onChange={e => {
-                        if (e.target.value === 'custom') { setRatioCustom(true); setNotaForm(f => ({ ...f, ratio: '' })) }
-                        else { setRatioCustom(false); setNotaForm(f => ({ ...f, ratio: e.target.value })) }
-                      }}
-                    >
+                    <select className="form-select" value={ratioCustom ? 'custom' : notaForm.ratio}
+                      onChange={e => { if (e.target.value === 'custom') { setRatioCustom(true); setNotaForm(f => ({ ...f, ratio: '' })) } else { setRatioCustom(false); setNotaForm(f => ({ ...f, ratio: e.target.value })) } }}>
                       <option value="">— Seleccionar —</option>
-                      <option value="3">3</option>
-                      <option value="3.5">3.5</option>
-                      <option value="4">4</option>
+                      <option value="3">3</option><option value="3.5">3.5</option><option value="4">4</option>
                       <option value="custom">Otro (ingresar manual)</option>
                     </select>
-                    {ratioCustom && (
-                      <input type="number" step="0.01" min="0.01" className="form-control mt-2" placeholder="Ingresa el ratio..." value={notaForm.ratio} onChange={e => setNotaForm(f => ({ ...f, ratio: e.target.value }))} />
-                    )}
+                    {ratioCustom && <input type="number" step="0.01" min="0.01" className="form-control mt-2" placeholder="Ingresa el ratio..." value={notaForm.ratio} onChange={e => setNotaForm(f => ({ ...f, ratio: e.target.value }))} />}
                     <small className="text-muted d-block mt-1">Parejas = floor(cantidad / ratio)</small>
-                    {parejasEstimadas !== null && (
-                      <div className="alert alert-success py-1 px-2 mt-2 mb-0" style={{ fontSize: '.85rem' }}>
-                        Parejas estimadas: <strong>{parejasEstimadas}</strong>
-                      </div>
-                    )}
+                    {parejasEstimadas !== null && <div className="alert alert-success py-1 px-2 mt-2 mb-0" style={{ fontSize: '.85rem' }}>Parejas estimadas: <strong>{parejasEstimadas}</strong></div>}
                   </div>
                 )}
-                <div>
-                  <label className="form-label fw-semibold">Cantidad *</label>
-                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Descripción</label>
-                  <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} />
-                </div>
+                <div><label className="form-label fw-semibold">Cantidad *</label>
+                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Descripción</label>
+                  <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowNotaModal(false); setRatioCustom(false) }}>Cancelar</button>
