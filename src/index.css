@@ -1,22 +1,61 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-:root {
-  --vs-green:       #4ade80;
-  --vs-green-dark:  #14532d;
-  --vs-sidebar-bg:  #0f1f14;
-  --vs-navbar-h:    52px;
-  --vs-sidebar-w:   220px;
+/* ══════════════════════════════════════════════════════
+   VARIABLES — Tema claro (default)
+══════════════════════════════════════════════════════ */
+:root,
+[data-theme="light"] {
+  --vs-green:        #4ade80;
+  --vs-green-dark:   #14532d;
+  --vs-sidebar-bg:   #0f1f14;
+  --vs-navbar-h:     52px;
+  --vs-sidebar-w:    220px;
+
+  --vs-bg:           #f9fafb;
+  --vs-bg-card:      #ffffff;
+  --vs-text:         #111827;
+  --vs-text-muted:   #6b7280;
+  --vs-border:       #e5e7eb;
+  --vs-border-soft:  #f3f4f6;
+  --vs-table-head:   #f9fafb;
+  --vs-input-bg:     #ffffff;
+  --vs-navbar-bg:    #ffffff;
+  --vs-hover-row:    #f9fafb;
 }
 
+/* ══════════════════════════════════════════════════════
+   VARIABLES — Tema oscuro
+══════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  --vs-bg:           #0d1117;
+  --vs-bg-card:      #161b22;
+  --vs-text:         #e6edf3;
+  --vs-text-muted:   #8b949e;
+  --vs-border:       #30363d;
+  --vs-border-soft:  #21262d;
+  --vs-table-head:   #1c2128;
+  --vs-input-bg:     #1c2128;
+  --vs-navbar-bg:    #161b22;
+  --vs-hover-row:    #1c2128;
+  --vs-sidebar-bg:   #0d1117;
+}
+
+/* ══════════════════════════════════════════════════════
+   BASE
+══════════════════════════════════════════════════════ */
 * { box-sizing: border-box; }
 
 body {
   font-family: 'DM Sans', sans-serif;
-  background: #f9fafb;
+  background: var(--vs-bg);
+  color: var(--vs-text);
   margin: 0;
+  transition: background-color 0.25s, color 0.25s;
 }
 
-/* ── Sidebar ── */
+/* ══════════════════════════════════════════════════════
+   SIDEBAR
+══════════════════════════════════════════════════════ */
 .vs-sidebar {
   width: var(--vs-sidebar-w);
   min-height: 100vh;
@@ -28,6 +67,7 @@ body {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  transition: background-color 0.25s;
 }
 
 .vs-sidebar .nav-link {
@@ -50,15 +90,103 @@ body {
   font-weight: 500;
 }
 
-/* ── Navbar ── */
+/* ══════════════════════════════════════════════════════
+   NAVBAR
+══════════════════════════════════════════════════════ */
 .vs-navbar {
   height: var(--vs-navbar-h);
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--vs-navbar-bg);
+  border-bottom: 1px solid var(--vs-border);
   flex-shrink: 0;
+  transition: background-color 0.25s, border-color 0.25s;
 }
 
-/* ── Badge rol ── */
+/* ══════════════════════════════════════════════════════
+   CARDS
+══════════════════════════════════════════════════════ */
+.vs-card {
+  background: var(--vs-bg-card);
+  border: 1px solid var(--vs-border);
+  border-radius: 10px;
+  padding: 1.25rem;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.vs-stat-card {
+  background: var(--vs-bg-card);
+  border: 1px solid var(--vs-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  transition: background-color 0.25s, border-color 0.25s, box-shadow 0.2s;
+}
+
+.vs-stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+/* ══════════════════════════════════════════════════════
+   TABLA
+══════════════════════════════════════════════════════ */
+.vs-table thead th {
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--vs-text-muted);
+  background: var(--vs-table-head);
+  border-bottom: 1px solid var(--vs-border);
+  transition: background-color 0.25s;
+}
+
+.vs-table tbody td {
+  font-size: .85rem;
+  vertical-align: middle;
+  border-color: var(--vs-border-soft);
+  color: var(--vs-text);
+  transition: color 0.25s;
+}
+
+.vs-table tbody tr:hover {
+  background: var(--vs-hover-row);
+}
+
+/* ══════════════════════════════════════════════════════
+   FORMULARIOS (Bootstrap override)
+══════════════════════════════════════════════════════ */
+.form-control,
+.form-select {
+  background-color: var(--vs-input-bg) !important;
+  border-color: var(--vs-border) !important;
+  color: var(--vs-text) !important;
+  transition: background-color 0.25s, border-color 0.25s, color 0.25s;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--vs-input-bg) !important;
+  color: var(--vs-text) !important;
+}
+
+.form-control::placeholder {
+  color: var(--vs-text-muted) !important;
+}
+
+/* ══════════════════════════════════════════════════════
+   TEXTO Y HELPERS
+══════════════════════════════════════════════════════ */
+.text-muted {
+  color: var(--vs-text-muted) !important;
+}
+
+.vs-page-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.5rem;
+  color: var(--vs-text);
+}
+
+/* ══════════════════════════════════════════════════════
+   BADGE ROL
+══════════════════════════════════════════════════════ */
 .vs-badge-role {
   font-size: .68rem;
   padding: 2px 7px;
@@ -66,55 +194,9 @@ body {
   font-weight: 500;
 }
 
-/* ── Cards ── */
-.vs-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 1.25rem;
-}
-
-.vs-stat-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 1.25rem 1.5rem;
-  transition: box-shadow .2s;
-}
-
-.vs-stat-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,.06);
-}
-
-/* ── Tabla ── */
-.vs-table thead th {
-  font-size: .75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  color: #6b7280;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.vs-table tbody td {
-  font-size: .85rem;
-  vertical-align: middle;
-  border-color: #f3f4f6;
-}
-
-.vs-table tbody tr:hover {
-  background: #f9fafb;
-}
-
-/* ── Page header ── */
-.vs-page-title {
-  font-family: 'DM Serif Display', serif;
-  font-size: 1.5rem;
-  color: #111827;
-}
-
-/* ── Botón verde ── */
+/* ══════════════════════════════════════════════════════
+   BOTÓN VERDE
+══════════════════════════════════════════════════════ */
 .btn-vs {
   background: var(--vs-green-dark);
   color: #fff;
@@ -126,7 +208,9 @@ body {
 }
 .btn-vs:hover { opacity: .88; color: #fff; }
 
-/* ── Spinner overlay ── */
+/* ══════════════════════════════════════════════════════
+   SPINNER
+══════════════════════════════════════════════════════ */
 .vs-spinner {
   display: flex;
   align-items: center;
@@ -134,6 +218,43 @@ body {
   padding: 3rem;
 }
 
-/* ── Predicción badge tendencia ── */
-.badge-creciente  { background: #dcfce7; color: #14532d; }
-.badge-decreciente{ background: #fee2e2; color: #991b1b; }
+/* ══════════════════════════════════════════════════════
+   PREDICCIÓN — badges tendencia
+══════════════════════════════════════════════════════ */
+.badge-creciente   { background: #dcfce7; color: #14532d; }
+.badge-decreciente { background: #fee2e2; color: #991b1b; }
+
+/* ══════════════════════════════════════════════════════
+   DARK — badges Bootstrap override
+══════════════════════════════════════════════════════ */
+[data-theme="dark"] .badge.bg-light {
+  background-color: #21262d !important;
+  color: var(--vs-text) !important;
+  border-color: var(--vs-border) !important;
+}
+
+[data-theme="dark"] .border {
+  border-color: var(--vs-border) !important;
+}
+
+[data-theme="dark"] .btn-outline-secondary {
+  color: var(--vs-text-muted);
+  border-color: var(--vs-border);
+}
+
+[data-theme="dark"] .btn-outline-secondary:hover {
+  background-color: var(--vs-border);
+  color: var(--vs-text);
+}
+
+[data-theme="dark"] .bg-white {
+  background-color: var(--vs-bg-card) !important;
+}
+
+[data-theme="dark"] .bg-light {
+  background-color: var(--vs-bg) !important;
+}
+
+[data-theme="dark"] .border-bottom {
+  border-color: var(--vs-border) !important;
+}
