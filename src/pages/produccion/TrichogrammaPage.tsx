@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { useTrichogramma, useCreateTrichogramma, useNotasAvispitas, useCreateNotaAvispitas, useUnidadesAvispas, useLugaresAvispitas } from '@/hooks/useProduccion'
+import {
+  useTrichogramma, useCreateTrichogramma, useAnularTrichogramma,
+  useNotasAvispitas, useCreateNotaAvispitas, useAnularNotaAvispitas,
+  useUnidadesAvispas, useLugaresAvispitas,
+} from '@/hooks/useProduccion'
 import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
@@ -36,6 +40,25 @@ function Pagination({ page, total, setPage }: { page: number; total: number; set
   )
 }
 
+function ConfirmModal({ mensaje, onConfirm, onCancel }: { mensaje: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }}>
+      <div className="modal-dialog modal-sm modal-dialog-centered">
+        <div className="modal-content">
+          <div className="modal-header border-0 pb-0">
+            <h6 className="modal-title fw-bold text-danger">⚠ Confirmar anulación</h6>
+          </div>
+          <div className="modal-body pt-2" style={{ fontSize: '.88rem' }}>{mensaje}</div>
+          <div className="modal-footer border-0 pt-0 gap-2">
+            <button className="btn btn-sm btn-secondary" onClick={onCancel}>Cancelar</button>
+            <button className="btn btn-sm btn-danger" onClick={onConfirm}>Anular</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TrichogrammaPage() {
   const { data: registros = [], isLoading } = useTrichogramma()
   const { data: notas = [] } = useNotasAvispitas()
@@ -43,10 +66,14 @@ export default function TrichogrammaPage() {
   const { data: lugares = [] } = useLugaresAvispitas()
   const crear = useCreateTrichogramma()
   const crearNota = useCreateNotaAvispitas()
+  const anular = useAnularTrichogramma()
+  const anularNota = useAnularNotaAvispitas()
 
   const [tab, setTab] = useState<'produccion' | 'notas'>('produccion')
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
+  const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota' } | null>(null)
+
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
   const [notaForm, setNotaForm] = useState({
     fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: ''
@@ -54,19 +81,13 @@ export default function TrichogrammaPage() {
 
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
-
   const esParasitacion = notaForm.tiposalida === 'Parasitacion'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
-    // Planchas × 80 = pulg²
     crear.mutate(
-      {
-        ...form,
-        cantidad: Number(form.cantidad) * 80,
-        id_unidad: form.id_unidad ? Number(form.id_unidad) : null
-      },
+      { ...form, cantidad: Number(form.cantidad) * 80, id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
       { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } }
     )
   }
@@ -74,27 +95,46 @@ export default function TrichogrammaPage() {
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!notaForm.fecha || !notaForm.cantidad) return toast.error('Completa los campos requeridos')
-
-    // Parasitación: planchas × 31 = pulg²; demás: directo en pulg²
-    const cantidadFinal = esParasitacion
-      ? Number(notaForm.cantidad) * 31
-      : Number(notaForm.cantidad)
-
-    crearNota.mutate({
-      ...notaForm,
-      cantidad: cantidadFinal,
-      id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
-      id_lugarliberacion: notaForm.id_lugarliberacion ? Number(notaForm.id_lugarliberacion) : null,
-    }, {
-      onSuccess: () => {
-        setShowNotaModal(false)
-        setNotaForm({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' })
+    const cantidadFinal = esParasitacion ? Number(notaForm.cantidad) * 31 : Number(notaForm.cantidad)
+    crearNota.mutate(
+      {
+        ...notaForm,
+        cantidad: cantidadFinal,
+        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
+        id_lugarliberacion: notaForm.id_lugarliberacion ? Number(notaForm.id_lugarliberacion) : null,
+      },
+      {
+        onSuccess: () => {
+          setShowNotaModal(false)
+          setNotaForm({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' })
+        }
       }
-    })
+    )
+  }
+
+  const ejecutarAnulacion = () => {
+    if (!confirm) return
+    if (confirm.tipo === 'produccion') {
+      anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    } else {
+      anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    }
   }
 
   return (
     <div>
+      {confirm && (
+        <ConfirmModal
+          mensaje={
+            confirm.tipo === 'produccion'
+              ? 'Se anulará este registro de producción de Trichogramma.'
+              : 'Se anulará esta nota de salida de avispitas.'
+          }
+          onConfirm={ejecutarAnulacion}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="vs-page-title mb-0">Trichogramma</h1>
@@ -121,7 +161,6 @@ export default function TrichogrammaPage() {
         </li>
       </ul>
 
-      {/* Tabla producción */}
       {tab === 'produccion' && (
         <div className="vs-card">
           {isLoading
@@ -134,22 +173,29 @@ export default function TrichogrammaPage() {
                       <th>Fecha</th>
                       <th>Cantidad (pulg²)</th>
                       <th>Activo</th>
+                      <th style={{ width: 90 }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {prodPag.slice.length === 0
-                      ? <tr><td colSpan={4} className="text-center text-muted py-4">Sin registros</td></tr>
+                      ? <tr><td colSpan={5} className="text-center text-muted py-4">Sin registros</td></tr>
                       : prodPag.slice.map((r: any, index: number) => (
                           <tr key={r.id}>
-                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>
-                              {(prodPag.page - 1) * PAGE_SIZE + index + 1}
-                            </td>
+                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
                             <td>{r.fecha}</td>
-                            <td>{r.cantidad.toLocaleString('es-PE', { maximumFractionDigits: 2 })}</td>
+                            <td>{Number(r.cantidad).toLocaleString('es-PE', { maximumFractionDigits: 2 })}</td>
+                            <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
                             <td>
-                              <span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>
-                                {r.activo ? 'Sí' : 'No'}
-                              </span>
+                              {r.activo && (
+                                <button
+                                  className="btn btn-sm btn-outline-danger"
+                                  style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                                  disabled={anular.isPending}
+                                  onClick={() => setConfirm({ id: r.id, tipo: 'produccion' })}
+                                >
+                                  Anular
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))
@@ -162,7 +208,6 @@ export default function TrichogrammaPage() {
         </div>
       )}
 
-      {/* Tabla notas */}
       {tab === 'notas' && (
         <div className="vs-card">
           <table className="table vs-table mb-0">
@@ -174,21 +219,34 @@ export default function TrichogrammaPage() {
                 <th>Lugar</th>
                 <th>Cantidad (pulg²)</th>
                 <th>Descripción</th>
+                <th>Activo</th>
+                <th style={{ width: 90 }}></th>
               </tr>
             </thead>
             <tbody>
               {notasPag.slice.length === 0
-                ? <tr><td colSpan={6} className="text-center text-muted py-4">Sin notas</td></tr>
+                ? <tr><td colSpan={8} className="text-center text-muted py-4">Sin notas</td></tr>
                 : notasPag.slice.map((n: any, index: number) => (
                     <tr key={n.id}>
-                      <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>
-                        {(notasPag.page - 1) * PAGE_SIZE + index + 1}
-                      </td>
+                      <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(notasPag.page - 1) * PAGE_SIZE + index + 1}</td>
                       <td>{n.fecha}</td>
                       <td><span className="badge bg-primary">{n.tiposalida}</span></td>
                       <td>{lugares.find((l: any) => l.id === n.id_lugarliberacion)?.nombre ?? '—'}</td>
                       <td>{Number(n.cantidad).toLocaleString('es-PE', { maximumFractionDigits: 2 })}</td>
                       <td>{n.descripcion ?? '—'}</td>
+                      <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
+                      <td>
+                        {n.activo && (
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                            disabled={anularNota.isPending}
+                            onClick={() => setConfirm({ id: n.id, tipo: 'nota' })}
+                          >
+                            Anular
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))
               }
@@ -215,14 +273,7 @@ export default function TrichogrammaPage() {
                   </div>
                   <div>
                     <label className="form-label fw-semibold">Planchas *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-control"
-                      value={form.cantidad}
-                      onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))}
-                      required
-                    />
+                    <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required />
                     {form.cantidad && (
                       <small className="text-muted mt-1 d-block">
                         = <strong>{(Number(form.cantidad) * 80).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg²</strong> guardados
@@ -239,9 +290,7 @@ export default function TrichogrammaPage() {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn-vs btn" disabled={crear.isPending}>
-                    {crear.isPending ? 'Guardando...' : 'Guardar'}
-                  </button>
+                  <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
                 </div>
               </form>
             </div>
@@ -266,11 +315,7 @@ export default function TrichogrammaPage() {
                   </div>
                   <div>
                     <label className="form-label fw-semibold">Tipo de salida</label>
-                    <select
-                      className="form-select"
-                      value={notaForm.tiposalida}
-                      onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value, cantidad: '' }))}
-                    >
+                    <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value, cantidad: '' }))}>
                       <option value="Parasitacion">Parasitación</option>
                       <option value="Liberacion">Liberación</option>
                       <option value="Ventas">Ventas</option>
@@ -284,17 +329,8 @@ export default function TrichogrammaPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label fw-semibold">
-                      {esParasitacion ? 'Planchas *' : 'Cantidad (pulg²) *'}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-control"
-                      value={notaForm.cantidad}
-                      onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))}
-                      required
-                    />
+                    <label className="form-label fw-semibold">{esParasitacion ? 'Planchas *' : 'Cantidad (pulg²) *'}</label>
+                    <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
                     {esParasitacion && notaForm.cantidad && (
                       <small className="text-muted mt-1 d-block">
                         = <strong>{(Number(notaForm.cantidad) * 31).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg²</strong> descontados
@@ -308,9 +344,7 @@ export default function TrichogrammaPage() {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>
-                    {crearNota.isPending ? 'Guardando...' : 'Guardar'}
-                  </button>
+                  <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
                 </div>
               </form>
             </div>
