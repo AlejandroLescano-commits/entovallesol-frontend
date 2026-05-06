@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGalleria, useCreateGalleria, useNotasGalleria, useCreateNotaGalleria, useUnidadesGalleria } from '@/hooks/useProduccion'
+import { useGalleria, useCreateGalleria, useAnularGalleria, useNotasGalleria, useCreateNotaGalleria, useAnularNotaGalleria, useUnidadesGalleria } from '@/hooks/useProduccion'
 import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
@@ -36,16 +36,38 @@ function Pagination({ page, total, setPage }: { page: number; total: number; set
   )
 }
 
+function ConfirmModal({ mensaje, onConfirm, onCancel }: { mensaje: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }}>
+      <div className="modal-dialog modal-sm modal-dialog-centered">
+        <div className="modal-content">
+          <div className="modal-header border-0 pb-0">
+            <h6 className="modal-title fw-bold text-danger">⚠ Confirmar anulación</h6>
+          </div>
+          <div className="modal-body pt-2" style={{ fontSize: '.88rem' }}>{mensaje}</div>
+          <div className="modal-footer border-0 pt-0 gap-2">
+            <button className="btn btn-sm btn-secondary" onClick={onCancel}>Cancelar</button>
+            <button className="btn btn-sm btn-danger" onClick={onConfirm}>Anular</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function GalleriaPage() {
   const { data: registros = [], isLoading } = useGalleria()
   const { data: notas = [] } = useNotasGalleria()
   const { data: unidades = [] } = useUnidadesGalleria()
   const crear = useCreateGalleria()
   const crearNota = useCreateNotaGalleria()
+  const anular = useAnularGalleria()
+  const anularNota = useAnularNotaGalleria()
 
   const [tab, setTab] = useState<'produccion' | 'notas'>('produccion')
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
+  const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota'; mensaje: string } | null>(null)
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
   const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' })
   const [ratioCustom, setRatioCustom] = useState(false)
@@ -81,6 +103,15 @@ export default function GalleriaPage() {
     )
   }
 
+  const ejecutarAnulacion = () => {
+    if (!confirm) return
+    if (confirm.tipo === 'produccion') {
+      anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    } else {
+      anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    }
+  }
+
   const parejasEstimadas =
     notaForm.tiposalida === 'Paratheresia' && notaForm.ratio && notaForm.cantidad
       ? Math.floor(Number(notaForm.cantidad) / Number(notaForm.ratio))
@@ -88,6 +119,14 @@ export default function GalleriaPage() {
 
   return (
     <div>
+      {confirm && (
+        <ConfirmModal
+          mensaje={confirm.mensaje}
+          onConfirm={ejecutarAnulacion}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="vs-page-title mb-0">Galleria melonella</h1>
@@ -118,39 +157,88 @@ export default function GalleriaPage() {
         <div className="vs-card">
           {isLoading
             ? <div className="vs-spinner"><div className="spinner-border text-success" /></div>
-            : <table className="table vs-table mb-0">
-                <thead><tr><th style={{ width: 48 }}>#</th><th>Fecha</th><th>Cantidad</th><th>Activo</th></tr></thead>
-                <tbody>
-                  {prodPag.slice.length === 0
-                    ? <tr><td colSpan={4} className="text-center text-muted py-4">Sin registros</td></tr>
-                    : prodPag.slice.map((r: any, index: number) => (
-                        <tr key={r.id}>
-                          <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
-                          <td>{r.fecha}</td><td>{r.cantidad}</td>
-                          <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
-                        </tr>
-                      ))
-                  }
-                </tbody>
-              </table>
+            : <>
+                <table className="table vs-table mb-0">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 48 }}>#</th>
+                      <th>Fecha</th>
+                      <th>Cantidad</th>
+                      <th>Activo</th>
+                      <th style={{ width: 90 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prodPag.slice.length === 0
+                      ? <tr><td colSpan={5} className="text-center text-muted py-4">Sin registros</td></tr>
+                      : prodPag.slice.map((r: any, index: number) => (
+                          <tr key={r.id}>
+                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
+                            <td>{r.fecha}</td>
+                            <td>{r.cantidad}</td>
+                            <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
+                            <td>
+                              {r.activo && (
+                                <button
+                                  className="btn btn-sm btn-outline-danger"
+                                  style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                                  disabled={anular.isPending}
+                                  onClick={() => setConfirm({ id: r.id, tipo: 'produccion', mensaje: 'Se anulará este registro de producción de Galleria.' })}
+                                >
+                                  Anular
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                    }
+                  </tbody>
+                </table>
+                <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
+              </>
           }
-          <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
         </div>
       )}
 
       {tab === 'notas' && (
         <div className="vs-card">
           <table className="table vs-table mb-0">
-            <thead><tr><th style={{ width: 48 }}>#</th><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Ratio</th><th>Descripción</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 48 }}>#</th>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Cantidad</th>
+                <th>Ratio</th>
+                <th>Descripción</th>
+                <th>Activo</th>
+                <th style={{ width: 90 }}></th>
+              </tr>
+            </thead>
             <tbody>
               {notasPag.slice.length === 0
-                ? <tr><td colSpan={6} className="text-center text-muted py-4">Sin notas</td></tr>
+                ? <tr><td colSpan={8} className="text-center text-muted py-4">Sin notas</td></tr>
                 : notasPag.slice.map((n: any, index: number) => (
                     <tr key={n.id}>
                       <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(notasPag.page - 1) * PAGE_SIZE + index + 1}</td>
                       <td>{n.fecha}</td>
                       <td><span className="badge bg-primary">{n.tiposalida}</span></td>
-                      <td>{n.cantidad}</td><td>{n.ratio ?? '—'}</td><td>{n.descripcion ?? '—'}</td>
+                      <td>{n.cantidad}</td>
+                      <td>{n.ratio ?? '—'}</td>
+                      <td>{n.descripcion ?? '—'}</td>
+                      <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
+                      <td>
+                        {n.activo && (
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                            disabled={anularNota.isPending}
+                            onClick={() => setConfirm({ id: n.id, tipo: 'nota', mensaje: 'Se anulará esta nota de salida de Galleria.' })}
+                          >
+                            Anular
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))
               }
@@ -160,7 +248,7 @@ export default function GalleriaPage() {
         </div>
       )}
 
-      {/* Modal: Nuevo registro de producción */}
+      {/* Modal producción — sin cambios */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
@@ -195,7 +283,7 @@ export default function GalleriaPage() {
         </div>
       )}
 
-      {/* Modal: Nota de Salida */}
+      {/* Modal nota salida — sin cambios */}
       {showNotaModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
@@ -217,7 +305,6 @@ export default function GalleriaPage() {
                     <option value="Ventas">Ventas</option>
                   </select>
                 </div>
-
                 {notaForm.tiposalida === 'Paratheresia' && (
                   <div>
                     <label className="form-label fw-semibold">Ratio</label>
@@ -225,13 +312,8 @@ export default function GalleriaPage() {
                       className="form-select"
                       value={ratioCustom ? 'custom' : notaForm.ratio}
                       onChange={e => {
-                        if (e.target.value === 'custom') {
-                          setRatioCustom(true)
-                          setNotaForm(f => ({ ...f, ratio: '' }))
-                        } else {
-                          setRatioCustom(false)
-                          setNotaForm(f => ({ ...f, ratio: e.target.value }))
-                        }
+                        if (e.target.value === 'custom') { setRatioCustom(true); setNotaForm(f => ({ ...f, ratio: '' })) }
+                        else { setRatioCustom(false); setNotaForm(f => ({ ...f, ratio: e.target.value })) }
                       }}
                     >
                       <option value="">— Seleccionar —</option>
@@ -240,21 +322,10 @@ export default function GalleriaPage() {
                       <option value="4">4</option>
                       <option value="custom">Otro (ingresar manual)</option>
                     </select>
-
                     {ratioCustom && (
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        className="form-control mt-2"
-                        placeholder="Ingresa el ratio..."
-                        value={notaForm.ratio}
-                        onChange={e => setNotaForm(f => ({ ...f, ratio: e.target.value }))}
-                      />
+                      <input type="number" step="0.01" min="0.01" className="form-control mt-2" placeholder="Ingresa el ratio..." value={notaForm.ratio} onChange={e => setNotaForm(f => ({ ...f, ratio: e.target.value }))} />
                     )}
-
                     <small className="text-muted d-block mt-1">Parejas = floor(cantidad / ratio)</small>
-
                     {parejasEstimadas !== null && (
                       <div className="alert alert-success py-1 px-2 mt-2 mb-0" style={{ fontSize: '.85rem' }}>
                         Parejas estimadas: <strong>{parejasEstimadas}</strong>
@@ -262,7 +333,6 @@ export default function GalleriaPage() {
                     )}
                   </div>
                 )}
-
                 <div>
                   <label className="form-label fw-semibold">Cantidad *</label>
                   <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
