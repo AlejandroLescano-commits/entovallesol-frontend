@@ -59,6 +59,39 @@ function ConfirmModal({ mensaje, onConfirm, onCancel }: { mensaje: string; onCon
   )
 }
 
+function DetailModal({ title, fields, onClose }: { title: string; fields: { label: string; value: any }[]; onClose: () => void }) {
+  return (
+    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }} onClick={onClose}>
+      <div className="modal-dialog modal-dialog-centered" onClick={e => e.stopPropagation()}>
+        <div className="modal-content">
+          <div className="modal-header" style={{ borderBottom: '2px solid #e5e7eb' }}>
+            <h5 className="modal-title fw-bold" style={{ fontSize: '.95rem' }}>🔍 {title}</h5>
+            <button className="btn-close" onClick={onClose} />
+          </div>
+          <div className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
+            <dl className="row mb-0" style={{ rowGap: '.4rem' }}>
+              {fields.map(({ label, value }) => (
+                <>
+                  <dt key={`dt-${label}`} className="col-sm-5 mb-0" style={{ fontSize: '.8rem', color: '#6b7280', fontWeight: 500 }}>{label}</dt>
+                  <dd key={`dd-${label}`} className="col-sm-7 mb-0" style={{ fontSize: '.88rem', color: value != null && value !== '' ? '#111827' : '#9ca3af' }}>
+                    {value != null && value !== '' ? value : '—'}
+                  </dd>
+                </>
+              ))}
+            </dl>
+          </div>
+          <div className="modal-footer" style={{ borderTop: '1px solid #f3f4f6' }}>
+            <button className="btn btn-secondary btn-sm" onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const fmt = (v: string | null | undefined) =>
+  v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : null
+
 export default function SitotrogaPage() {
   const { data: registros = [], isLoading } = useSitotroga()
   const { data: notas = [] } = useNotasSitodroga()
@@ -72,19 +105,17 @@ export default function SitotrogaPage() {
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
   const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota'; mensaje: string } | null>(null)
+  const [detail, setDetail] = useState<{ data: any; tipo: 'produccion' | 'nota' } | null>(null)
 
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
-  const [notaForm, setNotaForm] = useState({
-    fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: ''
-  })
+  const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' })
 
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
 
   const esExiguum = notaForm.tiposalida === 'T.exiguum'
   const cantidadConvertida = esExiguum && notaForm.cantidad
-    ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor || 0)
-    : null
+    ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor || 0) : null
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,51 +130,60 @@ export default function SitotrogaPage() {
     e.preventDefault()
     if (!notaForm.fecha || !notaForm.cantidad) return toast.error('Completa los campos requeridos')
     if (esExiguum && !notaForm.factor) return toast.error('El factor es obligatorio para T.exiguum')
-
-    const cantidadFinal = esExiguum
-      ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor)
-      : Number(notaForm.cantidad)
-
+    const cantidadFinal = esExiguum ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor) : Number(notaForm.cantidad)
     crearNota.mutate(
-      {
-        ...notaForm,
-        cantidad: cantidadFinal,
-        factor: esExiguum ? Number(notaForm.factor) : 1,
-        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
-      },
-      {
-        onSuccess: () => {
-          setShowNotaModal(false)
-          setNotaForm({ fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' })
-        }
-      }
+      { ...notaForm, cantidad: cantidadFinal, factor: esExiguum ? Number(notaForm.factor) : 1, id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null },
+      { onSuccess: () => { setShowNotaModal(false); setNotaForm({ fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' }) } }
     )
   }
 
   const pedirConfirm = (id: number, tipo: 'produccion' | 'nota', extra?: string) => {
-    const base = tipo === 'produccion'
-      ? 'Se anulará este registro de producción.'
-      : 'Se anulará esta nota de salida.'
-    const aviso = extra ? ` ${extra}` : ''
-    setConfirm({ id, tipo, mensaje: base + aviso })
+    const base = tipo === 'produccion' ? 'Se anulará este registro de producción.' : 'Se anulará esta nota de salida.'
+    setConfirm({ id, tipo, mensaje: base + (extra ? ` ${extra}` : '') })
   }
 
   const ejecutarAnulacion = () => {
     if (!confirm) return
-    if (confirm.tipo === 'produccion') {
-      anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
-    } else {
-      anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
-    }
+    if (confirm.tipo === 'produccion') anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    else anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
   }
+
+  const detailFields = detail
+    ? detail.tipo === 'produccion'
+      ? [
+          { label: 'ID', value: detail.data.id },
+          { label: 'Fecha', value: detail.data.fecha },
+          { label: 'Cantidad (g)', value: detail.data.cantidad },
+          { label: 'Unidad', value: detail.data.id_unidad },
+          { label: 'Estado', value: detail.data.activo ? '✅ Activo' : '❌ Anulado' },
+          { label: 'Registrado por', value: detail.data.registrado_por },
+          { label: 'Creado en', value: fmt(detail.data.creado_en) },
+          { label: 'Anulado por', value: detail.data.anulado_por },
+          { label: 'Anulado en', value: fmt(detail.data.anulado_en) },
+        ]
+      : [
+          { label: 'ID', value: detail.data.id },
+          { label: 'Fecha', value: detail.data.fecha },
+          { label: 'Tipo de salida', value: detail.data.tiposalida },
+          { label: 'Cantidad', value: detail.data.cantidad },
+          { label: 'Factor', value: detail.data.tiposalida === 'T.exiguum' ? detail.data.factor : null },
+          { label: 'Descripción', value: detail.data.descripcion },
+          { label: 'Estado', value: detail.data.activo ? '✅ Activo' : '❌ Anulado' },
+          { label: 'Registrado por', value: detail.data.registrado_por },
+          { label: 'Creado en', value: fmt(detail.data.creado_en) },
+          { label: 'Anulado por', value: detail.data.anulado_por },
+          { label: 'Anulado en', value: fmt(detail.data.anulado_en) },
+        ]
+    : []
 
   return (
     <div>
-      {confirm && (
-        <ConfirmModal
-          mensaje={confirm.mensaje}
-          onConfirm={ejecutarAnulacion}
-          onCancel={() => setConfirm(null)}
+      {confirm && <ConfirmModal mensaje={confirm.mensaje} onConfirm={ejecutarAnulacion} onCancel={() => setConfirm(null)} />}
+      {detail && (
+        <DetailModal
+          title={detail.tipo === 'produccion' ? 'Detalle — Producción Sitotroga' : 'Detalle — Nota de Salida Sitotroga'}
+          fields={detailFields}
+          onClose={() => setDetail(null)}
         />
       )}
 
@@ -161,14 +201,12 @@ export default function SitotrogaPage() {
       <ul className="nav nav-tabs mb-3">
         <li className="nav-item">
           <button className={`nav-link ${tab === 'produccion' ? 'active' : ''}`} onClick={() => { setTab('produccion'); prodPag.setPage(1) }}>
-            Producción
-            <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{registros.length}</span>
+            Producción <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{registros.length}</span>
           </button>
         </li>
         <li className="nav-item">
           <button className={`nav-link ${tab === 'notas' ? 'active' : ''}`} onClick={() => { setTab('notas'); notasPag.setPage(1) }}>
-            Notas de Salida
-            <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{notas.length}</span>
+            Notas de Salida <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{notas.length}</span>
           </button>
         </li>
       </ul>
@@ -181,12 +219,8 @@ export default function SitotrogaPage() {
                 <table className="table vs-table mb-0">
                   <thead>
                     <tr>
-                      <th style={{ width: 48 }}>#</th>
-                      <th>Fecha</th>
-                      <th>Cantidad (g)</th>
-                      <th>Unidad</th>
-                      <th>Activo</th>
-                      <th style={{ width: 90 }}></th>
+                      <th style={{ width: 48 }}>#</th><th>Fecha</th><th>Cantidad (g)</th><th>Unidad</th><th>Activo</th>
+                      <th style={{ width: 110 }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -195,20 +229,13 @@ export default function SitotrogaPage() {
                       : prodPag.slice.map((r: any, index: number) => (
                           <tr key={r.id}>
                             <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
-                            <td>{r.fecha}</td>
-                            <td>{r.cantidad}</td>
-                            <td>{r.id_unidad ?? '—'}</td>
+                            <td>{r.fecha}</td><td>{r.cantidad}</td><td>{r.id_unidad ?? '—'}</td>
                             <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
-                            <td>
+                            <td className="d-flex gap-1">
+                              <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: r, tipo: 'produccion' })}>👁</button>
                               {r.activo && (
-                                <button
-                                  className="btn btn-sm btn-outline-danger"
-                                  style={{ fontSize: '.72rem', padding: '2px 8px' }}
-                                  disabled={anular.isPending}
-                                  onClick={() => pedirConfirm(r.id, 'produccion')}
-                                >
-                                  Anular
-                                </button>
+                                <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anular.isPending}
+                                  onClick={() => pedirConfirm(r.id, 'produccion')}>Anular</button>
                               )}
                             </td>
                           </tr>
@@ -227,14 +254,8 @@ export default function SitotrogaPage() {
           <table className="table vs-table mb-0">
             <thead>
               <tr>
-                <th style={{ width: 48 }}>#</th>
-                <th>Fecha</th>
-                <th>Tipo</th>
-                <th>Cantidad</th>
-                <th>Factor</th>
-                <th>Descripción</th>
-                <th>Activo</th>
-                <th style={{ width: 90 }}></th>
+                <th style={{ width: 48 }}>#</th><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Factor</th><th>Descripción</th><th>Activo</th>
+                <th style={{ width: 110 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -249,23 +270,11 @@ export default function SitotrogaPage() {
                       <td>{n.tiposalida === 'T.exiguum' ? n.factor : '—'}</td>
                       <td>{n.descripcion ?? '—'}</td>
                       <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
-                      <td>
+                      <td className="d-flex gap-1">
+                        <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: n, tipo: 'nota' })}>👁</button>
                         {n.activo && (
-                          <button
-                            className="btn btn-sm btn-outline-danger"
-                            style={{ fontSize: '.72rem', padding: '2px 8px' }}
-                            disabled={anularNota.isPending}
-                            onClick={() =>
-                              pedirConfirm(
-                                n.id, 'nota',
-                                n.tiposalida === 'T.exiguum'
-                                  ? 'También se revertirá el registro de Trichogramma generado.'
-                                  : ''
-                              )
-                            }
-                          >
-                            Anular
-                          </button>
+                          <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anularNota.isPending}
+                            onClick={() => pedirConfirm(n.id, 'nota', n.tiposalida === 'T.exiguum' ? 'También se revertirá el registro de Trichogramma generado.' : '')}>Anular</button>
                         )}
                       </td>
                     </tr>
@@ -277,115 +286,65 @@ export default function SitotrogaPage() {
         </div>
       )}
 
-      {/* Modal producción */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Nuevo registro — Sitotroga</h5>
-                <button className="btn-close" onClick={() => setShowModal(false)} />
+          <div className="modal-dialog"><div className="modal-content">
+            <div className="modal-header"><h5 className="modal-title">Nuevo registro — Sitotroga</h5><button className="btn-close" onClick={() => setShowModal(false)} /></div>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body d-flex flex-column gap-3">
+                <div><label className="form-label fw-semibold">Fecha *</label><input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Cantidad (g) *</label><input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Unidad de medida</label>
+                  <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
+                    <option value="">— Seleccionar —</option>{unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                  </select></div>
               </div>
-              <form onSubmit={handleSubmit}>
-                <div className="modal-body d-flex flex-column gap-3">
-                  <div>
-                    <label className="form-label fw-semibold">Fecha *</label>
-                    <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required />
-                  </div>
-                  <div>
-                    <label className="form-label fw-semibold">Cantidad (g) *</label>
-                    <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required />
-                  </div>
-                  <div>
-                    <label className="form-label fw-semibold">Unidad de medida</label>
-                    <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
-                      <option value="">— Seleccionar —</option>
-                      {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
-                </div>
-              </form>
-            </div>
-          </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
+              </div>
+            </form>
+          </div></div>
         </div>
       )}
 
-      {/* Modal nota salida */}
       {showNotaModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Nota de Salida — Sitotroga</h5>
-                <button className="btn-close" onClick={() => setShowNotaModal(false)} />
+          <div className="modal-dialog"><div className="modal-content">
+            <div className="modal-header"><h5 className="modal-title">Nota de Salida — Sitotroga</h5><button className="btn-close" onClick={() => setShowNotaModal(false)} /></div>
+            <form onSubmit={handleNotaSubmit}>
+              <div className="modal-body d-flex flex-column gap-3">
+                <div><label className="form-label fw-semibold">Fecha *</label><input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Tipo de salida *</label>
+                  <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value, factor: '1', cantidad: '' }))}>
+                    <option value="T.exiguum">T. exiguum</option><option value="T.pretiosum">T. pretiosum</option>
+                    <option value="Crysopas">Crysopas</option><option value="Infestación">Infestación</option><option value="Ventas">Ventas</option>
+                  </select></div>
+                <div>
+                  <label className="form-label fw-semibold">{esExiguum ? 'Planchas *' : 'Cantidad (g) *'}</label>
+                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
+                  {esExiguum && notaForm.cantidad && <small className="text-muted mt-1 d-block">= {cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g descontados de Sitotroga</small>}
+                </div>
+                {esExiguum && (
+                  <div>
+                    <label className="form-label fw-semibold">Factor *</label>
+                    <input type="number" step="0.01" className="form-control" value={notaForm.factor} onChange={e => setNotaForm(f => ({ ...f, factor: e.target.value }))} required />
+                    <small className="text-muted mt-1 d-block">Fórmula: planchas × 12.5 + factor = gramos{notaForm.cantidad && <> → <strong>{cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g</strong></>}</small>
+                    {notaForm.cantidad && <small className="text-success mt-1 d-block fw-semibold">También suma {(Number(notaForm.cantidad) * 80).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg² al saldo de Trichogramma</small>}
+                  </div>
+                )}
+                <div><label className="form-label fw-semibold">Descripción</label><textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
+                <div><label className="form-label fw-semibold">Unidad de medida</label>
+                  <select className="form-select" value={notaForm.id_unidad} onChange={e => setNotaForm(f => ({ ...f, id_unidad: e.target.value }))}>
+                    <option value="">— Seleccionar —</option>{unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                  </select></div>
               </div>
-              <form onSubmit={handleNotaSubmit}>
-                <div className="modal-body d-flex flex-column gap-3">
-                  <div>
-                    <label className="form-label fw-semibold">Fecha *</label>
-                    <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required />
-                  </div>
-                  <div>
-                    <label className="form-label fw-semibold">Tipo de salida *</label>
-                    <select
-                      className="form-select"
-                      value={notaForm.tiposalida}
-                      onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value, factor: '1', cantidad: '' }))}
-                    >
-                      <option value="T.exiguum">T. exiguum</option>
-                      <option value="T.pretiosum">T. pretiosum</option>
-                      <option value="Crysopas">Crysopas</option>
-                      <option value="Infestación">Infestación</option>
-                      <option value="Ventas">Ventas</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="form-label fw-semibold">{esExiguum ? 'Planchas *' : 'Cantidad (g) *'}</label>
-                    <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
-                    {esExiguum && notaForm.cantidad && (
-                      <small className="text-muted mt-1 d-block">
-                        = {cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g descontados de Sitotroga
-                      </small>
-                    )}
-                  </div>
-                  {esExiguum && (
-                    <div>
-                      <label className="form-label fw-semibold">Factor *</label>
-                      <input type="number" step="0.01" className="form-control" value={notaForm.factor} onChange={e => setNotaForm(f => ({ ...f, factor: e.target.value }))} required />
-                      <small className="text-muted mt-1 d-block">
-                        Fórmula: planchas × 12.5 + factor = gramos
-                        {notaForm.cantidad && (<> → <strong>{cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g</strong></>)}
-                      </small>
-                      {notaForm.cantidad && (
-                        <small className="text-success mt-1 d-block fw-semibold">
-                          También suma {(Number(notaForm.cantidad) * 80).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg² al saldo de Trichogramma
-                        </small>
-                      )}
-                    </div>
-                  )}
-                  <div>
-                    <label className="form-label fw-semibold">Descripción</label>
-                    <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="form-label fw-semibold">Unidad de medida</label>
-                    <select className="form-select" value={notaForm.id_unidad} onChange={e => setNotaForm(f => ({ ...f, id_unidad: e.target.value }))}>
-                      <option value="">— Seleccionar —</option>
-                      {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
-                </div>
-              </form>
-            </div>
-          </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
+                <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
+              </div>
+            </form>
+          </div></div>
         </div>
       )}
     </div>
