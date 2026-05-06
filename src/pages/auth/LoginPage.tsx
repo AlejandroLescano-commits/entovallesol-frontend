@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -14,6 +15,7 @@ export default function LoginPage() {
     resolver: zodResolver(schema) 
   })
   const { mutate, isPending } = useLogin()
+  const [showPassword, setShowPassword] = useState(false)
 
   return (
     <>
@@ -37,6 +39,21 @@ export default function LoginPage() {
         .vs-btn-login { transition: background .2s, transform .1s; }
         .vs-btn-login:hover:not(:disabled) { background: #14532d !important; }
         .vs-btn-login:active:not(:disabled) { transform: scale(.99); }
+        .vs-eye-btn {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          padding: 0;
+          color: #9ca3af;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          line-height: 1;
+        }
+        .vs-eye-btn:hover { color: #166534; }
       `}</style>
 
       <div className="container-fluid vh-100 p-0 d-flex align-items-center justify-content-center bg-light">
@@ -89,7 +106,9 @@ export default function LoginPage() {
 
               <form onSubmit={handleSubmit((d) => mutate(d))} noValidate>
                 <div className="mb-3">
-                  <label className="vs-body d-block mb-1 text-uppercase text-muted" style={{ fontSize: '.7rem', fontWeight: 500 }}>Correo electrónico</label>
+                  <label className="vs-body d-block mb-1 text-uppercase text-muted" style={{ fontSize: '.7rem', fontWeight: 500 }}>
+                    Correo electrónico
+                  </label>
                   <input
                     type="email"
                     className={`form-control vs-body vs-field-input ${errors.email ? 'is-invalid' : ''}`}
@@ -100,14 +119,40 @@ export default function LoginPage() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="vs-body d-block mb-1 text-uppercase text-muted" style={{ fontSize: '.7rem', fontWeight: 500 }}>Contraseña</label>
-                  <input
-                    type="password"
-                    className={`form-control vs-body vs-field-input ${errors.password ? 'is-invalid' : ''}`}
-                    style={{ height: 44, background: '#f9fafb', borderRadius: 10 }}
-                    {...register('password')}
-                  />
-                  {errors.password && <div className="invalid-feedback">{errors.password.message}</div>}
+                  <label className="vs-body d-block mb-1 text-uppercase text-muted" style={{ fontSize: '.7rem', fontWeight: 500 }}>
+                    Contraseña
+                  </label>
+                  <div className="position-relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className={`form-control vs-body vs-field-input ${errors.password ? 'is-invalid' : ''}`}
+                      style={{ height: 44, background: '#f9fafb', borderRadius: 10, paddingRight: 40 }}
+                      {...register('password')}
+                    />
+                    <button
+                      type="button"
+                      className="vs-eye-btn"
+                      onClick={() => setShowPassword(v => !v)}
+                      tabIndex={-1}
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    >
+                      {showPassword ? (
+                        // Ojo cerrado
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+                          <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                      ) : (
+                        // Ojo abierto
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      )}
+                    </button>
+                    {errors.password && <div className="invalid-feedback">{errors.password.message}</div>}
+                  </div>
                 </div>
 
                 <button
@@ -120,9 +165,9 @@ export default function LoginPage() {
                 </button>
 
                 <div className="d-flex align-items-center gap-2 my-4">
-                  <hr className="grow m-0" />
+                  <hr className="flex-grow-1 m-0" />
                   <span className="vs-body text-muted" style={{ fontSize: '.7rem' }}>soporte</span>
-                  <hr className="grow m-0" />
+                  <hr className="flex-grow-1 m-0" />
                 </div>
               </form>
             </div>
