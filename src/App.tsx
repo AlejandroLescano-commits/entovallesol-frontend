@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
+import { useTheme } from '@/hooks/useTheme'
 import Layout from '@/components/layout/Layout'
 import LoginPage from '@/pages/auth/LoginPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
@@ -21,6 +22,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  useTheme()
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
