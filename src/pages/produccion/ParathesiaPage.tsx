@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParatheresia, useCreateParatheresia, useNotasMoscas, useCreateNotaMoscas, useUnidadesMoscas, useLugaresMoscas } from '@/hooks/useProduccion'
+import { useParatheresia, useCreateParatheresia, useAnularParatheresia, useNotasMoscas, useCreateNotaMoscas, useAnularNotaMoscas, useUnidadesMoscas, useLugaresMoscas } from '@/hooks/useProduccion'
 import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
@@ -36,6 +36,25 @@ function Pagination({ page, total, setPage }: { page: number; total: number; set
   )
 }
 
+function ConfirmModal({ mensaje, onConfirm, onCancel }: { mensaje: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }}>
+      <div className="modal-dialog modal-sm modal-dialog-centered">
+        <div className="modal-content">
+          <div className="modal-header border-0 pb-0">
+            <h6 className="modal-title fw-bold text-danger">⚠ Confirmar anulación</h6>
+          </div>
+          <div className="modal-body pt-2" style={{ fontSize: '.88rem' }}>{mensaje}</div>
+          <div className="modal-footer border-0 pt-0 gap-2">
+            <button className="btn btn-sm btn-secondary" onClick={onCancel}>Cancelar</button>
+            <button className="btn btn-sm btn-danger" onClick={onConfirm}>Anular</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ParathesiaPage() {
   const { data: registros = [], isLoading } = useParatheresia()
   const { data: notas = [] } = useNotasMoscas()
@@ -43,10 +62,13 @@ export default function ParathesiaPage() {
   const { data: lugares = [] } = useLugaresMoscas()
   const crear = useCreateParatheresia()
   const crearNota = useCreateNotaMoscas()
+  const anular = useAnularParatheresia()
+  const anularNota = useAnularNotaMoscas()
 
   const [tab, setTab] = useState<'produccion' | 'notas'>('produccion')
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
+  const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota'; mensaje: string } | null>(null)
   const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
   const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' })
 
@@ -56,21 +78,41 @@ export default function ParathesiaPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
-    crear.mutate({ ...form, cantidad: Number(form.cantidad), id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
-      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } })
+    crear.mutate(
+      { ...form, cantidad: Number(form.cantidad), id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
+      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } }
+    )
   }
 
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     crearNota.mutate({
-      ...notaForm, cantidad: Number(notaForm.cantidad),
+      ...notaForm,
+      cantidad: Number(notaForm.cantidad),
       id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
       id_lugarliberacion: notaForm.id_lugarliberacion ? Number(notaForm.id_lugarliberacion) : null,
-    }, { onSuccess: () => setShowNotaModal(false) })
+    }, { onSuccess: () => { setShowNotaModal(false); setNotaForm({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' }) } })
+  }
+
+  const ejecutarAnulacion = () => {
+    if (!confirm) return
+    if (confirm.tipo === 'produccion') {
+      anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    } else {
+      anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    }
   }
 
   return (
     <div>
+      {confirm && (
+        <ConfirmModal
+          mensaje={confirm.mensaje}
+          onConfirm={ejecutarAnulacion}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="vs-page-title mb-0">Paratheresia claripalpis</h1>
@@ -101,33 +143,66 @@ export default function ParathesiaPage() {
         <div className="vs-card">
           {isLoading
             ? <div className="vs-spinner"><div className="spinner-border text-success" /></div>
-            : <table className="table vs-table mb-0">
-                <thead><tr><th style={{ width: 48 }}>#</th><th>Fecha</th><th>Cantidad (parejas)</th><th>Activo</th></tr></thead>
-                <tbody>
-                  {prodPag.slice.length === 0
-                    ? <tr><td colSpan={4} className="text-center text-muted py-4">Sin registros</td></tr>
-                    : prodPag.slice.map((r: any, index: number) => (
-                        <tr key={r.id}>
-                          <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
-                          <td>{r.fecha}</td><td>{r.cantidad}</td>
-                          <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
-                        </tr>
-                      ))
-                  }
-                </tbody>
-              </table>
+            : <>
+                <table className="table vs-table mb-0">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 48 }}>#</th>
+                      <th>Fecha</th>
+                      <th>Cantidad (parejas)</th>
+                      <th>Activo</th>
+                      <th style={{ width: 90 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prodPag.slice.length === 0
+                      ? <tr><td colSpan={5} className="text-center text-muted py-4">Sin registros</td></tr>
+                      : prodPag.slice.map((r: any, index: number) => (
+                          <tr key={r.id}>
+                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
+                            <td>{r.fecha}</td>
+                            <td>{r.cantidad}</td>
+                            <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
+                            <td>
+                              {r.activo && (
+                                <button
+                                  className="btn btn-sm btn-outline-danger"
+                                  style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                                  disabled={anular.isPending}
+                                  onClick={() => setConfirm({ id: r.id, tipo: 'produccion', mensaje: 'Se anulará este registro de producción de Paratheresia.' })}
+                                >
+                                  Anular
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                    }
+                  </tbody>
+                </table>
+                <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
+              </>
           }
-          <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
         </div>
       )}
 
       {tab === 'notas' && (
         <div className="vs-card">
           <table className="table vs-table mb-0">
-            <thead><tr><th style={{ width: 48 }}>#</th><th>Fecha</th><th>Tipo</th><th>Lugar</th><th>Cantidad</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 48 }}>#</th>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Lugar</th>
+                <th>Cantidad</th>
+                <th>Activo</th>
+                <th style={{ width: 90 }}></th>
+              </tr>
+            </thead>
             <tbody>
               {notasPag.slice.length === 0
-                ? <tr><td colSpan={5} className="text-center text-muted py-4">Sin notas</td></tr>
+                ? <tr><td colSpan={7} className="text-center text-muted py-4">Sin notas</td></tr>
                 : notasPag.slice.map((n: any, index: number) => (
                     <tr key={n.id}>
                       <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(notasPag.page - 1) * PAGE_SIZE + index + 1}</td>
@@ -135,6 +210,19 @@ export default function ParathesiaPage() {
                       <td><span className="badge bg-primary">{n.tiposalida}</span></td>
                       <td>{lugares.find((l: any) => l.id === n.id_lugarliberacion)?.nombre ?? '—'}</td>
                       <td>{n.cantidad}</td>
+                      <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
+                      <td>
+                        {n.activo && (
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            style={{ fontSize: '.72rem', padding: '2px 8px' }}
+                            disabled={anularNota.isPending}
+                            onClick={() => setConfirm({ id: n.id, tipo: 'nota', mensaje: 'Se anulará esta nota de salida de Paratheresia.' })}
+                          >
+                            Anular
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))
               }
@@ -144,7 +232,7 @@ export default function ParathesiaPage() {
         </div>
       )}
 
-      {/* modales sin cambios */}
+      {/* Modales — sin cambios respecto al original */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
