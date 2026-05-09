@@ -4,6 +4,95 @@ import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
 
+// ─── Constantes de validación ───────────────────────────────────────────────
+const CANTIDAD_MAX = 10_000_000
+const CANTIDAD_MIN = 0.01
+const RATIO_MIN = 0.01
+const RATIO_MAX = 1000
+const DESCRIPCION_MAX = 500
+const HOY = new Date().toISOString().split('T')[0]
+// Fecha mínima razonable (ej: 5 años atrás)
+const FECHA_MIN = new Date(new Date().setFullYear(new Date().getFullYear() - 5))
+  .toISOString().split('T')[0]
+
+// ─── Tipos de errores ────────────────────────────────────────────────────────
+type ProduccionErrors = {
+  fecha?: string
+  cantidad?: string
+  id_unidad?: string
+}
+
+type NotaErrors = {
+  fecha?: string
+  tiposalida?: string
+  cantidad?: string
+  ratio?: string
+  descripcion?: string
+}
+
+// ─── Validadores ─────────────────────────────────────────────────────────────
+function validarFecha(fecha: string): string | undefined {
+  if (!fecha) return 'La fecha es obligatoria.'
+  if (fecha > HOY) return 'La fecha no puede ser futura.'
+  if (fecha < FECHA_MIN) return `La fecha no puede ser anterior a ${FECHA_MIN}.`
+  return undefined
+}
+
+function validarCantidad(valor: string): string | undefined {
+  if (!valor || valor.trim() === '') return 'La cantidad es obligatoria.'
+  const n = Number(valor)
+  if (isNaN(n)) return 'Debe ser un número válido.'
+  if (n <= 0) return 'La cantidad debe ser mayor a 0.'
+  if (n < CANTIDAD_MIN) return `Mínimo permitido: ${CANTIDAD_MIN}.`
+  if (n > CANTIDAD_MAX) return `Máximo permitido: ${CANTIDAD_MAX.toLocaleString()}.`
+  if (!/^\d+(\.\d{1,2})?$/.test(valor.trim())) return 'Máximo 2 decimales.'
+  return undefined
+}
+
+function validarRatio(valor: string, requerido: boolean): string | undefined {
+  if (!valor || valor.trim() === '') {
+    return requerido ? 'El ratio es obligatorio para Paratheresia.' : undefined
+  }
+  const n = Number(valor)
+  if (isNaN(n)) return 'Debe ser un número válido.'
+  if (n <= 0) return 'El ratio debe ser mayor a 0.'
+  if (n < RATIO_MIN) return `Mínimo permitido: ${RATIO_MIN}.`
+  if (n > RATIO_MAX) return `Máximo permitido: ${RATIO_MAX}.`
+  if (!/^\d+(\.\d{1,2})?$/.test(valor.trim())) return 'Máximo 2 decimales.'
+  return undefined
+}
+
+function validarDescripcion(valor: string): string | undefined {
+  if (valor.length > DESCRIPCION_MAX)
+    return `Máximo ${DESCRIPCION_MAX} caracteres (actual: ${valor.length}).`
+  return undefined
+}
+
+function validarProduccionForm(form: { fecha: string; cantidad: string; id_unidad: string }): ProduccionErrors {
+  return {
+    fecha: validarFecha(form.fecha),
+    cantidad: validarCantidad(form.cantidad),
+  }
+}
+
+function validarNotaForm(
+  form: { fecha: string; tiposalida: string; cantidad: string; ratio: string; descripcion: string },
+  ratioCustom: boolean
+): NotaErrors {
+  const ratioRequerido = form.tiposalida === 'Paratheresia'
+  return {
+    fecha: validarFecha(form.fecha),
+    cantidad: validarCantidad(form.cantidad),
+    ratio: ratioRequerido ? validarRatio(form.ratio, true) : undefined,
+    descripcion: validarDescripcion(form.descripcion),
+  }
+}
+
+function hasErrors(errors: Record<string, string | undefined>): boolean {
+  return Object.values(errors).some(Boolean)
+}
+
+// ─── Utilidades ───────────────────────────────────────────────────────────────
 function usePagination<T>(data: T[]) {
   const [page, setPage] = useState(1)
   const total = Math.ceil(data.length / PAGE_SIZE) || 1
@@ -87,9 +176,20 @@ function DetailModal({ title, fields, onClose }: { title: string; fields: { labe
   )
 }
 
+// ─── Componente de campo con error ───────────────────────────────────────────
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null
+  return <div className="invalid-feedback d-block" style={{ fontSize: '.78rem' }}>{msg}</div>
+}
+
 const fmt = (v: string | null | undefined) =>
   v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : null
 
+// ─── Estado inicial de formularios ───────────────────────────────────────────
+const INIT_FORM = { fecha: '', id_unidad: '', cantidad: '' }
+const INIT_NOTA = { fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' }
+
+// ─── Página principal ─────────────────────────────────────────────────────────
 export default function GalleriaPage() {
   const { data: registros = [], isLoading } = useGalleria()
   const { data: notas = [] } = useNotasGalleria()
@@ -104,28 +204,117 @@ export default function GalleriaPage() {
   const [showNotaModal, setShowNotaModal] = useState(false)
   const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota'; mensaje: string } | null>(null)
   const [detail, setDetail] = useState<{ data: any; tipo: 'produccion' | 'nota' } | null>(null)
-  const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
-  const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' })
+
+  // Formulario producción
+  const [form, setForm] = useState(INIT_FORM)
+  const [formErrors, setFormErrors] = useState<ProduccionErrors>({})
+  const [formTouched, setFormTouched] = useState<Partial<Record<keyof ProduccionErrors, boolean>>>({})
+
+  // Formulario nota
+  const [notaForm, setNotaForm] = useState(INIT_NOTA)
+  const [notaErrors, setNotaErrors] = useState<NotaErrors>({})
+  const [notaTouched, setNotaTouched] = useState<Partial<Record<keyof NotaErrors, boolean>>>({})
   const [ratioCustom, setRatioCustom] = useState(false)
 
-  const prodPag  = usePagination(registros)
+  const prodPag = usePagination(registros)
   const notasPag = usePagination(notas)
 
+  // ── Helpers para actualizar campo y validar on-blur ──────────────────────
+  const touchProd = (field: keyof ProduccionErrors) => {
+    setFormTouched(t => ({ ...t, [field]: true }))
+    const errs = validarProduccionForm(form)
+    setFormErrors(errs)
+  }
+
+  const touchNota = (field: keyof NotaErrors) => {
+    setNotaTouched(t => ({ ...t, [field]: true }))
+    const errs = validarNotaForm(notaForm, ratioCustom)
+    setNotaErrors(errs)
+  }
+
+  // Validar en tiempo real cuando el campo ya fue tocado
+  const setProdField = (key: keyof typeof form, value: string) => {
+    const newForm = { ...form, [key]: value }
+    setForm(newForm)
+    if (formTouched[key as keyof ProduccionErrors]) {
+      setFormErrors(validarProduccionForm(newForm))
+    }
+  }
+
+  const setNotaField = (key: keyof typeof notaForm, value: string) => {
+    const newForm = { ...notaForm, [key]: value }
+    setNotaForm(newForm)
+    if (notaTouched[key as keyof NotaErrors]) {
+      setNotaErrors(validarNotaForm(newForm, ratioCustom))
+    }
+  }
+
+  // ── Submit producción ────────────────────────────────────────────────────
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
+    // Marcar todos como tocados
+    setFormTouched({ fecha: true, cantidad: true, id_unidad: true })
+    const errs = validarProduccionForm(form)
+    setFormErrors(errs)
+    if (hasErrors(errs)) {
+      toast.error('Corrige los errores antes de guardar.')
+      return
+    }
     crear.mutate(
       { ...form, cantidad: Number(form.cantidad), id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
-      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } }
+      {
+        onSuccess: () => {
+          setShowModal(false)
+          setForm(INIT_FORM)
+          setFormErrors({})
+          setFormTouched({})
+        },
+      }
     )
   }
 
+  // ── Submit nota ──────────────────────────────────────────────────────────
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setNotaTouched({ fecha: true, cantidad: true, ratio: true, descripcion: true })
+    const errs = validarNotaForm(notaForm, ratioCustom)
+    setNotaErrors(errs)
+    if (hasErrors(errs)) {
+      toast.error('Corrige los errores antes de guardar.')
+      return
+    }
     crearNota.mutate(
-      { ...notaForm, cantidad: Number(notaForm.cantidad), ratio: notaForm.ratio ? Number(notaForm.ratio) : null, id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null },
-      { onSuccess: () => { setShowNotaModal(false); setNotaForm({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' }); setRatioCustom(false) } }
+      {
+        ...notaForm,
+        cantidad: Number(notaForm.cantidad),
+        ratio: notaForm.ratio ? Number(notaForm.ratio) : null,
+        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
+      },
+      {
+        onSuccess: () => {
+          setShowNotaModal(false)
+          setNotaForm(INIT_NOTA)
+          setNotaErrors({})
+          setNotaTouched({})
+          setRatioCustom(false)
+        },
+      }
     )
+  }
+
+  const cerrarNota = () => {
+    setShowNotaModal(false)
+    setNotaForm(INIT_NOTA)
+    setNotaErrors({})
+    setNotaTouched({})
+    setRatioCustom(false)
+  }
+
+  const cerrarProd = () => {
+    setShowModal(false)
+    setForm(INIT_FORM)
+    setFormErrors({})
+    setFormTouched({})
   }
 
   const ejecutarAnulacion = () => {
@@ -136,7 +325,8 @@ export default function GalleriaPage() {
 
   const parejasEstimadas =
     notaForm.tiposalida === 'Paratheresia' && notaForm.ratio && notaForm.cantidad
-      ? Math.floor(Number(notaForm.cantidad) / Number(notaForm.ratio)) : null
+      ? Math.floor(Number(notaForm.cantidad) / Number(notaForm.ratio))
+      : null
 
   const detailFields = detail
     ? detail.tipo === 'produccion'
@@ -226,19 +416,9 @@ export default function GalleriaPage() {
                             <td>{r.cantidad}</td>
                             <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
                             <td className="d-flex gap-1">
-                              <button
-                                className="btn btn-sm btn-outline-secondary"
-                                style={{ fontSize: '.72rem', padding: '2px 7px' }}
-                                title="Ver detalle"
-                                onClick={() => setDetail({ data: r, tipo: 'produccion' })}
-                              >👁</button>
+                              <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: r, tipo: 'produccion' })}>👁</button>
                               {r.activo && (
-                                <button
-                                  className="btn btn-sm btn-outline-danger"
-                                  style={{ fontSize: '.72rem', padding: '2px 8px' }}
-                                  disabled={anular.isPending}
-                                  onClick={() => setConfirm({ id: r.id, tipo: 'produccion', mensaje: 'Se anulará este registro de producción de Galleria.' })}
-                                >Anular</button>
+                                <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anular.isPending} onClick={() => setConfirm({ id: r.id, tipo: 'produccion', mensaje: 'Se anulará este registro de producción de Galleria.' })}>Anular</button>
                               )}
                             </td>
                           </tr>
@@ -280,19 +460,9 @@ export default function GalleriaPage() {
                       <td>{n.descripcion ?? '—'}</td>
                       <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
                       <td className="d-flex gap-1">
-                        <button
-                          className="btn btn-sm btn-outline-secondary"
-                          style={{ fontSize: '.72rem', padding: '2px 7px' }}
-                          title="Ver detalle"
-                          onClick={() => setDetail({ data: n, tipo: 'nota' })}
-                        >👁</button>
+                        <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: n, tipo: 'nota' })}>👁</button>
                         {n.activo && (
-                          <button
-                            className="btn btn-sm btn-outline-danger"
-                            style={{ fontSize: '.72rem', padding: '2px 8px' }}
-                            disabled={anularNota.isPending}
-                            onClick={() => setConfirm({ id: n.id, tipo: 'nota', mensaje: 'Se anulará esta nota de salida de Galleria.' })}
-                          >Anular</button>
+                          <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anularNota.isPending} onClick={() => setConfirm({ id: n.id, tipo: 'nota', mensaje: 'Se anulará esta nota de salida de Galleria.' })}>Anular</button>
                         )}
                       </td>
                     </tr>
@@ -304,76 +474,229 @@ export default function GalleriaPage() {
         </div>
       )}
 
+      {/* ── Modal Producción ─────────────────────────────────────────────────── */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Nuevo registro — Galleria</h5>
-              <button className="btn-close" onClick={() => setShowModal(false)} />
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Nuevo registro — Galleria</h5>
+                <button className="btn-close" onClick={cerrarProd} />
+              </div>
+              <form onSubmit={handleSubmit} noValidate>
+                <div className="modal-body d-flex flex-column gap-3">
+
+                  {/* Fecha */}
+                  <div>
+                    <label className="form-label fw-semibold">Fecha *</label>
+                    <input
+                      type="date"
+                      className={`form-control ${formTouched.fecha && formErrors.fecha ? 'is-invalid' : formTouched.fecha && !formErrors.fecha ? 'is-valid' : ''}`}
+                      value={form.fecha}
+                      max={HOY}
+                      min={FECHA_MIN}
+                      onChange={e => setProdField('fecha', e.target.value)}
+                      onBlur={() => touchProd('fecha')}
+                    />
+                    <FieldError msg={formTouched.fecha ? formErrors.fecha : undefined} />
+                  </div>
+
+                  {/* Cantidad */}
+                  <div>
+                    <label className="form-label fw-semibold">Cantidad *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={CANTIDAD_MIN}
+                      max={CANTIDAD_MAX}
+                      className={`form-control ${formTouched.cantidad && formErrors.cantidad ? 'is-invalid' : formTouched.cantidad && !formErrors.cantidad ? 'is-valid' : ''}`}
+                      value={form.cantidad}
+                      placeholder={`Ej: 500 (máx ${CANTIDAD_MAX.toLocaleString()})`}
+                      onChange={e => setProdField('cantidad', e.target.value)}
+                      onBlur={() => touchProd('cantidad')}
+                    />
+                    <FieldError msg={formTouched.cantidad ? formErrors.cantidad : undefined} />
+                    <small className="text-muted" style={{ fontSize: '.75rem' }}>Ingresa un valor positivo con hasta 2 decimales.</small>
+                  </div>
+
+                  {/* Unidad (opcional) */}
+                  <div>
+                    <label className="form-label fw-semibold">Unidad</label>
+                    <select
+                      className="form-select"
+                      value={form.id_unidad}
+                      onChange={e => setProdField('id_unidad', e.target.value)}
+                    >
+                      <option value="">— Seleccionar —</option>
+                      {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={cerrarProd}>Cancelar</button>
+                  <button type="submit" className="btn-vs btn" disabled={crear.isPending}>
+                    {crear.isPending ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Cantidad *</label>
-                  <input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Unidad</label>
-                  <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
-                    <option value="">— Seleccionar —</option>
-                    {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                  </select></div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
-              </div>
-            </form>
-          </div></div>
+          </div>
         </div>
       )}
 
+      {/* ── Modal Nota de Salida ──────────────────────────────────────────────── */}
       {showNotaModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Nota de Salida — Galleria</h5>
-              <button className="btn-close" onClick={() => { setShowNotaModal(false); setRatioCustom(false) }} />
-            </div>
-            <form onSubmit={handleNotaSubmit}>
-              <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label>
-                  <input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Tipo de salida</label>
-                  <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value }))}>
-                    <option value="Paratheresia">Paratheresia</option>
-                    <option value="Instalacion">Instalación</option>
-                    <option value="Ventas">Ventas</option>
-                  </select></div>
-                {notaForm.tiposalida === 'Paratheresia' && (
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Nota de Salida — Galleria</h5>
+                <button className="btn-close" onClick={cerrarNota} />
+              </div>
+              <form onSubmit={handleNotaSubmit} noValidate>
+                <div className="modal-body d-flex flex-column gap-3">
+
+                  {/* Fecha */}
                   <div>
-                    <label className="form-label fw-semibold">Ratio</label>
-                    <select className="form-select" value={ratioCustom ? 'custom' : notaForm.ratio}
-                      onChange={e => { if (e.target.value === 'custom') { setRatioCustom(true); setNotaForm(f => ({ ...f, ratio: '' })) } else { setRatioCustom(false); setNotaForm(f => ({ ...f, ratio: e.target.value })) } }}>
-                      <option value="">— Seleccionar —</option>
-                      <option value="3">3</option><option value="3.5">3.5</option><option value="4">4</option>
-                      <option value="custom">Otro (ingresar manual)</option>
-                    </select>
-                    {ratioCustom && <input type="number" step="0.01" min="0.01" className="form-control mt-2" placeholder="Ingresa el ratio..." value={notaForm.ratio} onChange={e => setNotaForm(f => ({ ...f, ratio: e.target.value }))} />}
-                    <small className="text-muted d-block mt-1">Parejas = floor(cantidad / ratio)</small>
-                    {parejasEstimadas !== null && <div className="alert alert-success py-1 px-2 mt-2 mb-0" style={{ fontSize: '.85rem' }}>Parejas estimadas: <strong>{parejasEstimadas}</strong></div>}
+                    <label className="form-label fw-semibold">Fecha *</label>
+                    <input
+                      type="date"
+                      className={`form-control ${notaTouched.fecha && notaErrors.fecha ? 'is-invalid' : notaTouched.fecha && !notaErrors.fecha ? 'is-valid' : ''}`}
+                      value={notaForm.fecha}
+                      max={HOY}
+                      min={FECHA_MIN}
+                      onChange={e => setNotaField('fecha', e.target.value)}
+                      onBlur={() => touchNota('fecha')}
+                    />
+                    <FieldError msg={notaTouched.fecha ? notaErrors.fecha : undefined} />
                   </div>
-                )}
-                <div><label className="form-label fw-semibold">Cantidad *</label>
-                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Descripción</label>
-                  <textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowNotaModal(false); setRatioCustom(false) }}>Cancelar</button>
-                <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
-              </div>
-            </form>
-          </div></div>
+
+                  {/* Tipo de salida */}
+                  <div>
+                    <label className="form-label fw-semibold">Tipo de salida</label>
+                    <select
+                      className="form-select"
+                      value={notaForm.tiposalida}
+                      onChange={e => {
+                        const val = e.target.value
+                        setNotaField('tiposalida', val)
+                        // Al cambiar tipo, limpiar ratio si no es Paratheresia
+                        if (val !== 'Paratheresia') {
+                          setNotaField('ratio', '')
+                          setRatioCustom(false)
+                        }
+                      }}
+                    >
+                      <option value="Paratheresia">Paratheresia</option>
+                      <option value="Instalacion">Instalación</option>
+                      <option value="Ventas">Ventas</option>
+                    </select>
+                  </div>
+
+                  {/* Ratio (solo Paratheresia) */}
+                  {notaForm.tiposalida === 'Paratheresia' && (
+                    <div>
+                      <label className="form-label fw-semibold">
+                        Ratio *
+                        <span className="text-muted fw-normal ms-1" style={{ fontSize: '.78rem' }}>(larvas por pareja)</span>
+                      </label>
+                      <select
+                        className={`form-select ${notaTouched.ratio && notaErrors.ratio ? 'is-invalid' : notaTouched.ratio && !notaErrors.ratio && notaForm.ratio ? 'is-valid' : ''}`}
+                        value={ratioCustom ? 'custom' : notaForm.ratio}
+                        onChange={e => {
+                          if (e.target.value === 'custom') {
+                            setRatioCustom(true)
+                            setNotaField('ratio', '')
+                          } else {
+                            setRatioCustom(false)
+                            setNotaField('ratio', e.target.value)
+                          }
+                        }}
+                        onBlur={() => touchNota('ratio')}
+                      >
+                        <option value="">— Seleccionar —</option>
+                        <option value="3">3</option>
+                        <option value="3.5">3.5</option>
+                        <option value="4">4</option>
+                        <option value="custom">Otro (ingresar manual)</option>
+                      </select>
+
+                      {ratioCustom && (
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={RATIO_MIN}
+                          max={RATIO_MAX}
+                          className={`form-control mt-2 ${notaTouched.ratio && notaErrors.ratio ? 'is-invalid' : notaTouched.ratio && !notaErrors.ratio && notaForm.ratio ? 'is-valid' : ''}`}
+                          placeholder={`Ratio manual (${RATIO_MIN}–${RATIO_MAX})`}
+                          value={notaForm.ratio}
+                          onChange={e => setNotaField('ratio', e.target.value)}
+                          onBlur={() => touchNota('ratio')}
+                        />
+                      )}
+
+                      <FieldError msg={notaTouched.ratio ? notaErrors.ratio : undefined} />
+                      <small className="text-muted d-block mt-1" style={{ fontSize: '.75rem' }}>
+                        Parejas = floor(cantidad / ratio)
+                      </small>
+
+                      {parejasEstimadas !== null && !notaErrors.ratio && !notaErrors.cantidad && (
+                        <div className="alert alert-success py-1 px-2 mt-2 mb-0" style={{ fontSize: '.85rem' }}>
+                          Parejas estimadas: <strong>{parejasEstimadas}</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cantidad */}
+                  <div>
+                    <label className="form-label fw-semibold">Cantidad *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={CANTIDAD_MIN}
+                      max={CANTIDAD_MAX}
+                      className={`form-control ${notaTouched.cantidad && notaErrors.cantidad ? 'is-invalid' : notaTouched.cantidad && !notaErrors.cantidad ? 'is-valid' : ''}`}
+                      value={notaForm.cantidad}
+                      placeholder={`Ej: 1000 (máx ${CANTIDAD_MAX.toLocaleString()})`}
+                      onChange={e => setNotaField('cantidad', e.target.value)}
+                      onBlur={() => touchNota('cantidad')}
+                    />
+                    <FieldError msg={notaTouched.cantidad ? notaErrors.cantidad : undefined} />
+                    <small className="text-muted" style={{ fontSize: '.75rem' }}>Ingresa un valor positivo con hasta 2 decimales.</small>
+                  </div>
+
+                  {/* Descripción */}
+                  <div>
+                    <label className="form-label fw-semibold">
+                      Descripción
+                      <span className="text-muted fw-normal ms-1" style={{ fontSize: '.78rem' }}>
+                        ({notaForm.descripcion.length}/{DESCRIPCION_MAX})
+                      </span>
+                    </label>
+                    <textarea
+                      className={`form-control ${notaTouched.descripcion && notaErrors.descripcion ? 'is-invalid' : ''}`}
+                      rows={2}
+                      maxLength={DESCRIPCION_MAX}
+                      value={notaForm.descripcion}
+                      placeholder="Observaciones opcionales..."
+                      onChange={e => setNotaField('descripcion', e.target.value)}
+                      onBlur={() => touchNota('descripcion')}
+                    />
+                    <FieldError msg={notaTouched.descripcion ? notaErrors.descripcion : undefined} />
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={cerrarNota}>Cancelar</button>
+                  <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>
+                    {crearNota.isPending ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       )}
     </div>
