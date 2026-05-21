@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useLogin } from '@/hooks/useAuth'
-
+import logoValleSol from '@/assets/logoVallesol.jpg'
 const schema = z.object({
   email:    z.string().email('Ingresa un correo válido'),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
@@ -70,7 +70,8 @@ export default function LoginPage() {
           {/* ── Left Panel ── */}
           <div className="col-md-7 d-none d-md-flex position-relative">
             <img
-              src="https://marverde.pe/wp-content/uploads/2023/07/AREAS-VERDES-PROYECTO-CORALES-MARVERDE-e1716326790651-1024x900.jpg"
+              <img
+  src={logoValleSol}
               alt="ValleSol proyecto"
               className="w-100 h-100"
               style={{ objectFit: 'cover' }}
