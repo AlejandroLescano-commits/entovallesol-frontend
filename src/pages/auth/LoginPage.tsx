@@ -69,7 +69,6 @@ export default function LoginPage() {
         >
           {/* ── Left Panel ── */}
           <div className="col-md-7 d-none d-md-flex position-relative">
-            <img
               <img
   src={logoValleSol}
               alt="ValleSol proyecto"
