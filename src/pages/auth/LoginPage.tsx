@@ -4,18 +4,61 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useLogin } from '@/hooks/useAuth'
 import logoValleSol from '@/assets/logoVallesol.jpg'
+
+// ─── Schema de validación con seguridad reforzada ───────────────────────────
 const schema = z.object({
-  email:    z.string().email('Ingresa un correo válido'),
-  password: z.string().min(6, 'Mínimo 6 caracteres'),
+  email: z
+    .string()
+    .min(1, 'El correo es requerido')
+    .max(254, 'El correo no puede superar los 254 caracteres')  // RFC 5321
+    .email('Ingresa un correo válido')
+    .refine(
+      (val) => !/<|>|'|"|;|--/.test(val),
+      'El correo contiene caracteres no permitidos'
+    ),
+
+  password: z
+    .string()
+    .min(6, 'Mínimo 6 caracteres')
+    .max(72, 'Máximo 72 caracteres')           // límite real de bcrypt
+    .refine(
+      (val) => !/^\s|\s$/.test(val),
+      'La contraseña no puede empezar ni terminar con espacios'
+    )
+    .refine(
+      (val) => !/<script|<\/script|javascript:/i.test(val),
+      'La contraseña contiene contenido no permitido'
+    ),
 })
+
 type Form = z.infer<typeof schema>
 
+// ─── Constantes de límites ───────────────────────────────────────────────────
+const MAX_EMAIL_LENGTH    = 254   // RFC 5321
+const MAX_PASSWORD_LENGTH = 72    // bcrypt limit
+const MIN_PASSWORD_LENGTH = 6
+
 export default function LoginPage() {
-  const { register, handleSubmit, formState: { errors } } = useForm<Form>({ 
-    resolver: zodResolver(schema) 
-  })
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<Form>({ resolver: zodResolver(schema) })
+
   const { mutate, isPending } = useLogin()
   const [showPassword, setShowPassword] = useState(false)
+
+  // Sanitiza pegado de texto: recorta espacios extremos y trunca al límite
+  const handlePaste = (
+    e: React.ClipboardEvent<HTMLInputElement>,
+    maxLen: number
+  ) => {
+    e.preventDefault()
+    const pasted = e.clipboardData
+      .getData('text')
+      .slice(0, maxLen)          // trunca al límite del campo
+    document.execCommand('insertText', false, pasted)
+  }
 
   return (
     <>
@@ -54,6 +97,15 @@ export default function LoginPage() {
           line-height: 1;
         }
         .vs-eye-btn:hover { color: #166534; }
+        .vs-char-count {
+          font-size: .68rem;
+          color: #9ca3af;
+          text-align: right;
+          margin-top: 3px;
+          font-family: 'DM Sans', sans-serif;
+        }
+        .vs-char-count.warn { color: #d97706; }
+        .vs-char-count.danger { color: #dc2626; }
       `}</style>
 
       <div className="container-fluid vh-100 p-0 d-flex align-items-center justify-content-center bg-light">
@@ -69,15 +121,18 @@ export default function LoginPage() {
         >
           {/* ── Left Panel ── */}
           <div className="col-md-7 d-none d-md-flex position-relative">
-              <img
-  src={logoValleSol}
+            <img
+              src={logoValleSol}
               alt="ValleSol proyecto"
               className="w-100 h-100"
               style={{ objectFit: 'cover' }}
             />
             <div className="position-absolute top-0 start-0 w-100 h-100 vs-left-overlay" />
             <div className="position-absolute bottom-0 start-0 p-4 pb-5" style={{ zIndex: 2 }}>
-              <span className="d-inline-flex align-items-center gap-2 rounded-pill text-white vs-badge vs-body mb-3 px-3 py-1" style={{ fontSize: '.75rem' }}>
+              <span
+                className="d-inline-flex align-items-center gap-2 rounded-pill text-white vs-badge vs-body mb-3 px-3 py-1"
+                style={{ fontSize: '.75rem' }}
+              >
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80' }} />
                 Portal de gestión activo
               </span>
@@ -90,8 +145,13 @@ export default function LoginPage() {
           {/* ── Right Panel ── */}
           <div className="col-12 col-md-5 bg-white d-flex align-items-center justify-content-center p-5">
             <div style={{ width: '100%', maxWidth: 340 }}>
+
+              {/* Logo */}
               <div className="d-flex align-items-center gap-2 mb-4">
-                <div className="d-flex align-items-center justify-content-center" style={{ width: 36, height: 36, borderRadius: 10, background: '#166534' }}>
+                <div
+                  className="d-flex align-items-center justify-content-center"
+                  style={{ width: 36, height: 36, borderRadius: 10, background: '#166534' }}
+                >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="#4ade80">
                     <path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1-2.3A4.49 4.49 0 008 20c8 0 6-8 14-8a4.38 4.38 0 010 .56A8 8 0 0017 8z"/>
                   </svg>
@@ -102,33 +162,60 @@ export default function LoginPage() {
               </div>
 
               <h2 className="vs-heading mb-1" style={{ fontSize: '1.55rem' }}>Bienvenido</h2>
-              <p className="vs-body text-muted mb-4" style={{ fontSize: '.8rem' }}>Ingresa tus credenciales para continuar.</p>
+              <p className="vs-body text-muted mb-4" style={{ fontSize: '.8rem' }}>
+                Ingresa tus credenciales para continuar.
+              </p>
 
-              <form onSubmit={handleSubmit((d) => mutate(d))} noValidate>
+              <form onSubmit={handleSubmit((d) => mutate(d))} noValidate autoComplete="off">
+
+                {/* ── Campo: Correo ── */}
                 <div className="mb-3">
-                  <label className="vs-body d-block mb-1 text-uppercase text-muted" style={{ fontSize: '.7rem', fontWeight: 500 }}>
+                  <label
+                    className="vs-body d-block mb-1 text-uppercase text-muted"
+                    style={{ fontSize: '.7rem', fontWeight: 500 }}
+                  >
                     Correo electrónico
                   </label>
                   <input
                     type="email"
+                    inputMode="email"
+                    autoComplete="username"
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    maxLength={MAX_EMAIL_LENGTH}
                     className={`form-control vs-body vs-field-input ${errors.email ? 'is-invalid' : ''}`}
                     style={{ height: 44, background: '#f9fafb', borderRadius: 10 }}
+                    onPaste={(e) => handlePaste(e, MAX_EMAIL_LENGTH)}
                     {...register('email')}
                   />
-                  {errors.email && <div className="invalid-feedback">{errors.email.message}</div>}
+                  {errors.email && (
+                    <div className="invalid-feedback">{errors.email.message}</div>
+                  )}
                 </div>
 
+                {/* ── Campo: Contraseña ── */}
                 <div className="mb-4">
-                  <label className="vs-body d-block mb-1 text-uppercase text-muted" style={{ fontSize: '.7rem', fontWeight: 500 }}>
+                  <label
+                    className="vs-body d-block mb-1 text-uppercase text-muted"
+                    style={{ fontSize: '.7rem', fontWeight: 500 }}
+                  >
                     Contraseña
                   </label>
                   <div className="position-relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      spellCheck={false}
+                      maxLength={MAX_PASSWORD_LENGTH}
+                      minLength={MIN_PASSWORD_LENGTH}
                       className={`form-control vs-body vs-field-input ${errors.password ? 'is-invalid' : ''}`}
                       style={{ height: 44, background: '#f9fafb', borderRadius: 10, paddingRight: 40 }}
+                      onPaste={(e) => handlePaste(e, MAX_PASSWORD_LENGTH)}
                       {...register('password')}
                     />
+
+                    {/* Toggle visibilidad */}
                     <button
                       type="button"
                       className="vs-eye-btn"
@@ -137,24 +224,26 @@ export default function LoginPage() {
                       aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
                       {showPassword ? (
-                        // Ojo cerrado
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
                           <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
                           <line x1="1" y1="1" x2="23" y2="23"/>
                         </svg>
                       ) : (
-                        // Ojo abierto
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                           <circle cx="12" cy="12" r="3"/>
                         </svg>
                       )}
                     </button>
-                    {errors.password && <div className="invalid-feedback">{errors.password.message}</div>}
+
+                    {errors.password && (
+                      <div className="invalid-feedback">{errors.password.message}</div>
+                    )}
                   </div>
                 </div>
 
+                {/* ── Submit ── */}
                 <button
                   type="submit"
                   disabled={isPending}
@@ -169,6 +258,7 @@ export default function LoginPage() {
                   <span className="vs-body text-muted" style={{ fontSize: '.7rem' }}>soporte</span>
                   <hr className="flex-grow-1 m-0" />
                 </div>
+
               </form>
             </div>
           </div>
