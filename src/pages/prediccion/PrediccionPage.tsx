@@ -6,14 +6,12 @@ import {
   useModeloKpis,
   useEntrenarModelo,
 } from '@/hooks/usePrediccion'
-
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 interface PrediccionDia {
   fecha: string
   demanda_estimada: number
   produccion_necesaria: number
 }
-
 interface BalanceDia {
   fecha: string
   produccion_esperada: number
@@ -21,7 +19,6 @@ interface BalanceDia {
   balance: number
   estado: 'superávit' | 'déficit'
 }
-
 interface ModeloInfo {
   r2_score: number | null
   mae: number | null
@@ -29,7 +26,6 @@ interface ModeloInfo {
   n_registros: number | null
   entrenado_en: string
 }
-
 interface ResultadoEspecie {
   especie: string
   unidad: string
@@ -46,7 +42,6 @@ interface ResultadoEspecie {
   balance: BalanceDia[]
   error?: string
 }
-
 interface ModeloConfigRow {
   especie: string
   activo: boolean
@@ -54,7 +49,6 @@ interface ModeloConfigRow {
   ultimo_r2: number | null
   ultimo_entreno: string | null
 }
-
 interface LogRow {
   entrenado_en: string
   r2_score: number
@@ -64,7 +58,18 @@ interface LogRow {
   fue_reemplazado: boolean
   motivo_rechazo: string | null
 }
-
+interface ResultadoEntreno {
+  entrenado?: boolean
+  fue_reemplazado?: boolean
+  motivo_rechazo?: string | null
+  saltado?: boolean
+  motivo?: string
+  ensemble?: {
+    r2_score: number | null
+    mae: number | null
+    rmse: number | null
+  }
+}
 // ── Constantes ─────────────────────────────────────────────────────────────────
 const ESPECIES = [
   { key: 'sitotroga',    label: 'Sitotroga',    unidad: 'g',       color: '#16a34a', light: '#f0fdf4', icon: '🌾' },
@@ -72,65 +77,52 @@ const ESPECIES = [
   { key: 'galleria',     label: 'Galleria',     unidad: 'unid.',   color: '#9333ea', light: '#faf5ff', icon: '🦋' },
   { key: 'paratheresia', label: 'Paratheresia', unidad: 'parejas', color: '#ea580c', light: '#fff7ed', icon: '🪰' },
 ] as const
-
 const PAGE_SIZE = 10
-
 // ── Utilidades ─────────────────────────────────────────────────────────────────
 function fmt(n: number | null | undefined): string {
   if (n == null) return '—'
   return Number.isInteger(n) ? String(n) : n.toFixed(3)
 }
-
 function fmtFecha(iso: string): string {
   return iso?.slice(0, 10) ?? '—'
 }
-
 function r2Color(v: number | null): string {
   if (v == null) return '#9ca3af'
   if (v >= 0.85) return '#16a34a'
   if (v >= 0.6)  return '#ea580c'
   return '#dc2626'
 }
-
 function paginar<T>(data: T[], pagina: number): T[] {
   return data.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE)
 }
-
 // ── Tipos paginación ──────────────────────────────────────────────────────────
-type PagState  = Record<string, number>
-type PagAction = { key: string; page: number } | { type: 'reset' }
-
+type PagState = Record<string, number>
+type PagAction =
+  | { kind: 'set'; key: string; page: number }
+  | { kind: 'reset' }
 function pagReducer(state: PagState, action: PagAction): PagState {
-  if ('type' in action && action.type === 'reset')
+  if (action.kind === 'reset')
     return Object.fromEntries(ESPECIES.map(e => [e.key, 1]))
-  const a = action as { key: string; page: number }
-  return { ...state, [a.key]: a.page }
+  return { ...state, [action.key]: action.page }
 }
-
 // ── CSS global ────────────────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   @keyframes fadeUp   { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:none } }
   @keyframes spin     { to { transform: rotate(360deg) } }
   @keyframes pulse    { 0%,100% { opacity:1 } 50% { opacity:.5 } }
   @keyframes shimmer  { from { background-position:-200% 0 } to { background-position:200% 0 } }
-
   .pred-card      { animation: fadeUp .35s ease both }
   .pred-card:nth-child(2) { animation-delay:.05s }
   .pred-card:nth-child(3) { animation-delay:.10s }
   .pred-card:nth-child(4) { animation-delay:.15s }
-
   .pred-tab-btn   { transition: background .15s, color .15s, box-shadow .15s }
   .pred-tab-btn:hover:not(.active) { background: #f3f4f6 !important }
-
   .pred-btn-primary { transition: opacity .15s, transform .1s }
   .pred-btn-primary:hover:not(:disabled) { opacity:.9 }
   .pred-btn-primary:active:not(:disabled) { transform: scale(.98) }
-
   .pred-toggle    { transition: background .2s }
   .pred-toggle-thumb { transition: left .2s }
-
   .pred-row:hover { background: #f9fafb !important }
-
   .pred-skeleton  {
     background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
     background-size: 200% 100%;
@@ -138,19 +130,20 @@ const GLOBAL_CSS = `
     border-radius: 6px;
   }
 `
-
 // ── Paginador ─────────────────────────────────────────────────────────────────
-function Paginador({ total, pagina, onChange }: { total: number; pagina: number; onChange: (p: number) => void }) {
+function Paginador({
+  total, pagina, onChange,
+}: {
+  total: number; pagina: number; onChange: (p: number) => void
+}) {
   const totalPags = Math.ceil(total / PAGE_SIZE)
   if (totalPags <= 1) return null
-
   const pages = Array.from({ length: totalPags }, (_, i) => i + 1)
     .filter(p => p === 1 || p === totalPags || Math.abs(p - pagina) <= 1)
     .reduce<(number | '...')[]>((acc, p, i, arr) => {
       if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...')
       acc.push(p); return acc
     }, [])
-
   const btnStyle = (active: boolean, disabled: boolean): React.CSSProperties => ({
     padding: '4px 10px', borderRadius: 6,
     border: `1px solid ${active ? '#16a34a' : '#e5e7eb'}`,
@@ -159,14 +152,13 @@ function Paginador({ total, pagina, onChange }: { total: number; pagina: number;
     cursor: disabled ? 'not-allowed' : 'pointer',
     fontSize: 12, fontWeight: active ? 600 : 400,
   })
-
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
       <span style={{ fontSize: 12, color: '#9ca3af' }}>
         Pág. {pagina} de {totalPags} · {total} registros
       </span>
       <div style={{ display: 'flex', gap: 4 }}>
-        <button onClick={() => onChange(1)}         disabled={pagina === 1}         style={btnStyle(false, pagina === 1)}>«</button>
+        <button onClick={() => onChange(1)}          disabled={pagina === 1}         style={btnStyle(false, pagina === 1)}>«</button>
         <button onClick={() => onChange(pagina - 1)} disabled={pagina === 1}         style={btnStyle(false, pagina === 1)}>‹</button>
         {pages.map((p, i) =>
           p === '...'
@@ -174,12 +166,11 @@ function Paginador({ total, pagina, onChange }: { total: number; pagina: number;
             : <button key={p} onClick={() => onChange(p as number)} style={btnStyle(pagina === p, false)}>{p}</button>
         )}
         <button onClick={() => onChange(pagina + 1)} disabled={pagina === totalPags} style={btnStyle(false, pagina === totalPags)}>›</button>
-        <button onClick={() => onChange(totalPags)} disabled={pagina === totalPags} style={btnStyle(false, pagina === totalPags)}>»</button>
+        <button onClick={() => onChange(totalPags)}  disabled={pagina === totalPags} style={btnStyle(false, pagina === totalPags)}>»</button>
       </div>
     </div>
   )
 }
-
 // ── Chip / Badge ──────────────────────────────────────────────────────────────
 function Chip({ label, bg, color }: { label: string; bg: string; color: string }) {
   return (
@@ -194,9 +185,12 @@ function Chip({ label, bg, color }: { label: string; bg: string; color: string }
     </span>
   )
 }
-
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color }: { label: string; value: string | number | null; sub?: string; color?: string }) {
+function StatCard({
+  label, value, sub, color,
+}: {
+  label: string; value: string | number | null; sub?: string; color?: string
+}) {
   return (
     <div style={{
       background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
@@ -210,7 +204,6 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
     </div>
   )
 }
-
 // ── Barra R² ──────────────────────────────────────────────────────────────────
 function R2Bar({ value }: { value: number | null }) {
   const pct = Math.max(0, Math.min(100, (value ?? 0) * 100))
@@ -232,13 +225,11 @@ function R2Bar({ value }: { value: number | null }) {
     </div>
   )
 }
-
 // ── Panel KPIs ────────────────────────────────────────────────────────────────
 function KpisPanel({ especie, color }: { especie: string; color: string }) {
   const [open, setOpen] = useState(false)
   const { data, isLoading } = useModeloKpis(especie)
   const logs: LogRow[] = data ?? []
-
   return (
     <div>
       <button
@@ -260,7 +251,6 @@ function KpisPanel({ especie, color }: { especie: string; color: string }) {
           transition: 'transform .2s', display: 'inline-block', marginLeft: 2,
         }}>▼</span>
       </button>
-
       {open && (
         <div style={{ marginTop: 12, animation: 'fadeUp .2s ease' }}>
           {isLoading && (
@@ -270,7 +260,6 @@ function KpisPanel({ especie, color }: { especie: string; color: string }) {
               ))}
             </div>
           )}
-
           {!isLoading && logs.length === 0 && (
             <div style={{
               background: '#f9fafb', border: '1px dashed #e5e7eb',
@@ -279,16 +268,15 @@ function KpisPanel({ especie, color }: { especie: string; color: string }) {
               Sin historial de entrenamientos aún.
             </div>
           )}
-
           {!isLoading && logs.length > 0 && (() => {
             const ult = logs[0]
             return (
               <>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                  <StatCard label="R²"        value={fmt(ult.r2_score)}   sub="Ajuste"           color={r2Color(ult.r2_score)} />
-                  <StatCard label="MAE"       value={fmt(ult.mae)}        sub="Error medio" />
-                  <StatCard label="RMSE"      value={fmt(ult.rmse)}       sub="Error cuadrático" />
-                  <StatCard label="Registros" value={ult.n_registros}     sub="Datos usados"     color={color} />
+                  <StatCard label="R²"        value={fmt(ult.r2_score)}  sub="Ajuste"           color={r2Color(ult.r2_score)} />
+                  <StatCard label="MAE"       value={fmt(ult.mae)}       sub="Error medio" />
+                  <StatCard label="RMSE"      value={fmt(ult.rmse)}      sub="Error cuadrático" />
+                  <StatCard label="Registros" value={ult.n_registros}    sub="Datos usados"     color={color} />
                   <div style={{
                     background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
                     padding: '12px 16px', textAlign: 'center', flex: '1 1 90px',
@@ -304,9 +292,7 @@ function KpisPanel({ especie, color }: { especie: string; color: string }) {
                     <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{fmtFecha(ult.entrenado_en)}</div>
                   </div>
                 </div>
-
                 <R2Bar value={ult.r2_score} />
-
                 {logs.length > 1 && (
                   <div style={{ marginTop: 16, overflowX: 'auto' }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
@@ -359,9 +345,12 @@ function KpisPanel({ especie, color }: { especie: string; color: string }) {
     </div>
   )
 }
-
 // ── Tabla genérica de predicciones ────────────────────────────────────────────
-function TablaPredicciones({ predicciones, unidad }: { predicciones: PrediccionDia[]; unidad: string }) {
+function TablaPredicciones({
+  predicciones, unidad,
+}: {
+  predicciones: PrediccionDia[]; unidad: string
+}) {
   const [pagina, setPagina] = useState(1)
   if (!predicciones?.length) return (
     <div style={{ color: '#9ca3af', fontSize: 13, padding: '12px 0' }}>Sin predicciones disponibles.</div>
@@ -395,7 +384,6 @@ function TablaPredicciones({ predicciones, unidad }: { predicciones: PrediccionD
     </>
   )
 }
-
 // ── Tabla Balance ─────────────────────────────────────────────────────────────
 function TablaBalance({ balance, unidad }: { balance: BalanceDia[]; unidad: string }) {
   const [pagina, setPagina] = useState(1)
@@ -404,14 +392,11 @@ function TablaBalance({ balance, unidad }: { balance: BalanceDia[]; unidad: stri
       Sin datos de balance. Se necesitan predicciones de producción y salidas.
     </div>
   )
-
   const superavit = balance.filter(b => b.estado === 'superávit').length
   const deficit   = balance.length - superavit
   const pctOk     = Math.round((superavit / balance.length) * 100)
-
   return (
     <>
-      {/* Resumen */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{
           background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: 8,
@@ -425,7 +410,6 @@ function TablaBalance({ balance, unidad }: { balance: BalanceDia[]; unidad: stri
         }}>
           ↓ {deficit} días con déficit
         </div>
-        {/* Mini barra de cobertura */}
         <div style={{ flex: '1 1 120px', minWidth: 120 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
             <span style={{ fontSize: 11, color: '#6b7280' }}>Cobertura</span>
@@ -436,7 +420,6 @@ function TablaBalance({ balance, unidad }: { balance: BalanceDia[]; unidad: stri
           </div>
         </div>
       </div>
-
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -474,9 +457,10 @@ function TablaBalance({ balance, unidad }: { balance: BalanceDia[]; unidad: stri
     </>
   )
 }
-
 // ── Tabla Por Destino ─────────────────────────────────────────────────────────
-function TablaPorDestino({ destinos, unidad }: {
+function TablaPorDestino({
+  destinos, unidad,
+}: {
   destinos: Record<string, { predicciones?: PrediccionDia[]; error?: string }>
   unidad: string
 }) {
@@ -485,9 +469,9 @@ function TablaPorDestino({ destinos, unidad }: {
   const [pagina, setPagina] = useState(1)
   const pred = destinos[activo]
   useEffect(() => { setPagina(1) }, [activo])
-
-  if (!tipos.length) return <div style={{ color: '#9ca3af', fontSize: 13 }}>Sin destinos configurados.</div>
-
+  if (!tipos.length) return (
+    <div style={{ color: '#9ca3af', fontSize: 13 }}>Sin destinos configurados.</div>
+  )
   return (
     <>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -501,7 +485,6 @@ function TablaPorDestino({ destinos, unidad }: {
           }}>{t}</button>
         ))}
       </div>
-
       {pred?.error ? (
         <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e' }}>
           ⚠️ {pred.error}
@@ -536,13 +519,15 @@ function TablaPorDestino({ destinos, unidad }: {
     </>
   )
 }
-
 // ── Resumen rápido de especie ─────────────────────────────────────────────────
-function EspecieResumen({ r, color, unidad }: { r: ResultadoEspecie; color: string; unidad: string }) {
-  const pred = r.prediccion_produccion
-  const bal  = r.balance ?? []
+function EspecieResumen({
+  r, color, unidad,
+}: {
+  r: ResultadoEspecie; color: string; unidad: string
+}) {
+  const pred    = r.prediccion_produccion
+  const bal     = r.balance ?? []
   const deficit = bal.filter(b => b.estado === 'déficit').length
-
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
       {pred?.r2_score != null && (
@@ -567,12 +552,10 @@ function EspecieResumen({ r, color, unidad }: { r: ResultadoEspecie; color: stri
     </div>
   )
 }
-
 // ── Tarjeta de Especie ────────────────────────────────────────────────────────
 type Tab = 'produccion' | 'destino' | 'balance' | 'kpis'
-
 function EspecieCard({
-  label, unidad, color, icon, especieClave, resultado: r, pagina, onPaginaChange,
+  label, unidad, color, icon, especieClave, resultado: r,
 }: {
   label: string; unidad: string; color: string; icon: string
   especieClave: string
@@ -580,7 +563,6 @@ function EspecieCard({
   pagina: number; onPaginaChange: (p: number) => void
 }) {
   const [tab, setTab] = useState<Tab>('produccion')
-
   if (r?.error) return (
     <div className="pred-card" style={{
       background: '#fff', border: '1px solid #fee2e2', borderRadius: 14,
@@ -595,26 +577,20 @@ function EspecieCard({
       </div>
     </div>
   )
-
   const pred = r.prediccion_produccion
-
   const TABS: { key: Tab; label: string }[] = [
     { key: 'produccion', label: 'Producción' },
     { key: 'destino',    label: 'Por destino' },
     { key: 'balance',    label: 'Balance' },
     { key: 'kpis',       label: 'KPIs' },
   ]
-
   return (
     <div className="pred-card" style={{
       background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14,
       boxShadow: '0 1px 4px rgba(0,0,0,.06)', overflow: 'hidden',
     }}>
-      {/* Franja superior de color */}
       <div style={{ height: 3, background: color }} />
-
       <div style={{ padding: 20 }}>
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
           <div style={{
             width: 40, height: 40, borderRadius: 10,
@@ -628,11 +604,7 @@ function EspecieCard({
             <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{r.especie} · {r.unidad}</div>
           </div>
         </div>
-
-        {/* Chips resumen */}
         <EspecieResumen r={r} color={color} unidad={unidad} />
-
-        {/* Tabs */}
         <div style={{
           display: 'flex', gap: 2, marginBottom: 16,
           background: '#f3f4f6', borderRadius: 10, padding: 3,
@@ -655,14 +627,8 @@ function EspecieCard({
             </button>
           ))}
         </div>
-
-        {/* Contenido de tabs */}
         {tab === 'produccion' && (
-          <>
-            <TablaPredicciones predicciones={pred?.predicciones ?? []} unidad={unidad} />
-            {/* la paginación externa (para mantener la página al cambiar días) */}
-            {/* Se sobreescribe con la interna de TablaPredicciones — se puede unificar si se desea */}
-          </>
+          <TablaPredicciones predicciones={pred?.predicciones ?? []} unidad={unidad} />
         )}
         {tab === 'destino' && r.prediccion_por_destino && (
           <TablaPorDestino destinos={r.prediccion_por_destino} unidad={unidad} />
@@ -677,37 +643,32 @@ function EspecieCard({
     </div>
   )
 }
-
 // ── Panel de entrenamiento ────────────────────────────────────────────────────
 function PanelEntrenamiento() {
   const { data: configs, isLoading } = useModeloConfig() as {
     data: ModeloConfigRow[] | undefined; isLoading: boolean
   }
-  const { mutate: updateConfig, isPending: isUpdating } = useUpdateModeloConfig()
+  const { mutate: updateConfig } = useUpdateModeloConfig()
   const {
-    mutate: entrenar,
+    mutate:    entrenar,
     isPending: isTraining,
     variables: trainTarget,
   } = useEntrenarModelo()
-
-  const [editRango, setEditRango]     = useState<string | null>(null)
-  const [rangoVal,  setRangoVal]      = useState(6)
-  const [resultado, setResultado]     = useState<Record<string, any> | null>(null)
-  const [collapsed, setCollapsed]     = useState(false)
-
+  const [editRango,  setEditRango]  = useState<string | null>(null)
+  const [rangoVal,   setRangoVal]   = useState(6)
+  const [resultado,  setResultado]  = useState<Record<string, ResultadoEntreno> | null>(null)
+  const [collapsed,  setCollapsed]  = useState(false)
   const handleEntrenar = useCallback((especie?: string) => {
     setResultado(null)
     entrenar(especie, {
       onSuccess: (res) => setResultado(res),
     })
   }, [entrenar])
-
   return (
     <div style={{
       background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14,
       marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,.06)', overflow: 'hidden',
     }}>
-      {/* Header colapsable */}
       <div
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -750,8 +711,6 @@ function PanelEntrenamiento() {
           }}>▼</span>
         </div>
       </div>
-
-      {/* Cards de especies (colapsable) */}
       {!collapsed && (
         <div style={{ padding: '0 20px 20px' }}>
           {isLoading ? (
@@ -763,7 +722,7 @@ function PanelEntrenamiento() {
           ) : (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {configs?.map(cfg => {
-                const esp = ESPECIES.find(e => e.key === cfg.especie)
+                const esp           = ESPECIES.find(e => e.key === cfg.especie)
                 const isThisTraining = isTraining && trainTarget === cfg.especie
                 return (
                   <div key={cfg.especie} style={{
@@ -771,7 +730,6 @@ function PanelEntrenamiento() {
                     borderRadius: 10, padding: '12px 14px', flex: '1 1 160px',
                     transition: 'border-color .2s',
                   }}>
-                    {/* Nombre + último R² */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                       <div style={{ fontWeight: 700, fontSize: 13, color: '#111827', textTransform: 'capitalize' }}>
                         {esp?.icon} {cfg.especie}
@@ -784,8 +742,6 @@ function PanelEntrenamiento() {
                         />
                       )}
                     </div>
-
-                    {/* Rango de meses */}
                     {editRango === cfg.especie ? (
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8 }}>
                         <input
@@ -799,7 +755,11 @@ function PanelEntrenamiento() {
                         />
                         <span style={{ fontSize: 11, color: '#6b7280' }}>meses</span>
                         <button
-                          onClick={e => { e.stopPropagation(); updateConfig({ especie: cfg.especie, data: { rango_meses: rangoVal } }); setEditRango(null) }}
+                          onClick={e => {
+                            e.stopPropagation()
+                            updateConfig({ especie: cfg.especie, data: { rango_meses: rangoVal } })
+                            setEditRango(null)
+                          }}
                           style={{ background: esp?.color ?? '#16a34a', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}
                         >✓</button>
                         <button
@@ -819,14 +779,13 @@ function PanelEntrenamiento() {
                         Rango: {cfg.rango_meses} meses ✎
                       </button>
                     )}
-
-                    {/* Botón entrenar individual */}
                     <button
                       onClick={e => { e.stopPropagation(); handleEntrenar(cfg.especie) }}
                       disabled={isTraining}
                       className="pred-btn-primary"
                       style={{
-                        width: '100%', padding: '6px 0', borderRadius: 7, border: `1px solid ${esp?.color ?? '#16a34a'}30`,
+                        width: '100%', padding: '6px 0', borderRadius: 7,
+                        border: `1px solid ${esp?.color ?? '#16a34a'}30`,
                         background: isThisTraining ? (esp?.color ?? '#16a34a') + '18' : '#fff',
                         color: esp?.color ?? '#16a34a',
                         fontWeight: 700, fontSize: 12, cursor: isTraining ? 'not-allowed' : 'pointer',
@@ -836,7 +795,6 @@ function PanelEntrenamiento() {
                       <span style={{ display: 'inline-block', animation: isThisTraining ? 'spin 1s linear infinite' : 'none' }}>⚙️</span>
                       {isThisTraining ? 'Entrenando…' : 'Entrenar'}
                     </button>
-
                     {cfg.ultimo_entreno && (
                       <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6 }}>
                         Último: {fmtFecha(cfg.ultimo_entreno)}
@@ -847,8 +805,6 @@ function PanelEntrenamiento() {
               })}
             </div>
           )}
-
-          {/* Resultado del entrenamiento */}
           {resultado && (
             <div style={{
               marginTop: 14, background: '#f0fdf4', border: '1px solid #bbf7d0',
@@ -857,13 +813,20 @@ function PanelEntrenamiento() {
             }}>
               <div style={{ fontWeight: 700, color: '#15803d', marginBottom: 6 }}>✓ Entrenamiento completado</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {Object.entries(resultado).map(([esp, res]: [string, any]) => (
+                {Object.entries(resultado).map(([esp, res]) => (
                   <div key={esp} style={{ color: '#374151' }}>
                     <strong style={{ textTransform: 'capitalize' }}>{esp}:</strong>{' '}
-                    {res?.fue_reemplazado
-                      ? <span style={{ color: '#15803d' }}>✓ Guardado — R² {fmt(res.r2_score)}, MAE {fmt(res.mae)}</span>
-                      : <span style={{ color: '#92400e' }}>✗ Rechazado — {res?.motivo_rechazo ?? 'datos insuficientes'}</span>
-                    }
+                    {res?.saltado ? (
+                      <span style={{ color: '#92400e' }}>⚠ Saltado — {res.motivo ?? 'sin datos suficientes'}</span>
+                    ) : res?.fue_reemplazado ? (
+                      <span style={{ color: '#15803d' }}>
+                        ✓ Guardado — R² {fmt(res.ensemble?.r2_score)}, MAE {fmt(res.ensemble?.mae)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#92400e' }}>
+                        ✗ Rechazado — {res?.motivo_rechazo ?? 'datos insuficientes'}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -884,25 +847,23 @@ function PanelEntrenamiento() {
     </div>
   )
 }
-
 // ── Selector de días ──────────────────────────────────────────────────────────
 const ATAJOS = [7, 14, 30, 60, 90, 180] as const
-
 function SelectorDias({
-  dias, onCambio, onActualizar, isFetching,
+  dias, onCambio, onCalcular, onActualizar, isFetching,
 }: {
   dias: number
-  onCambio: (n: number) => void
+  onCambio:    (n: number) => void
+  onCalcular:  (n?: number) => void
   onActualizar: () => void
   isFetching: boolean
 }) {
   const [input, setInput] = useState(String(dias))
-
+  useEffect(() => { setInput(String(dias)) }, [dias])
   const aplicar = () => {
     const n = parseInt(input)
-    if (n > 0 && n <= 365) onCambio(n)
+    if (n > 0 && n <= 365) onCalcular(n)
   }
-
   return (
     <div style={{
       background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14,
@@ -923,12 +884,11 @@ function SelectorDias({
             }}
           />
         </div>
-
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {ATAJOS.map(d => (
             <button
               key={d}
-              onClick={() => { setInput(String(d)); onCambio(d) }}
+              onClick={() => { setInput(String(d)); onCalcular(d) }}
               style={{
                 padding: '8px 13px', borderRadius: 8, border: '1px solid',
                 borderColor: dias === d ? '#16a34a' : '#e5e7eb',
@@ -939,7 +899,6 @@ function SelectorDias({
             >{d}d</button>
           ))}
         </div>
-
         <button
           onClick={aplicar}
           style={{
@@ -950,7 +909,6 @@ function SelectorDias({
         >
           Calcular
         </button>
-
         <button
           onClick={onActualizar}
           style={{
@@ -967,15 +925,12 @@ function SelectorDias({
     </div>
   )
 }
-
 // ── Banner de alerta global ───────────────────────────────────────────────────
 function BannerAlerta({ data }: { data: Record<string, ResultadoEspecie> }) {
   const especiesConDeficit = Object.entries(data)
     .filter(([, r]) => r.balance?.some(b => b.estado === 'déficit'))
     .map(([k]) => ESPECIES.find(e => e.key === k)?.label ?? k)
-
   if (!especiesConDeficit.length) return null
-
   return (
     <div style={{
       background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10,
@@ -991,7 +946,6 @@ function BannerAlerta({ data }: { data: Record<string, ResultadoEspecie> }) {
     </div>
   )
 }
-
 // ── Skeleton de carga ─────────────────────────────────────────────────────────
 function SkeletonCards() {
   return (
@@ -1015,31 +969,35 @@ function SkeletonCards() {
     </div>
   )
 }
-
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function PrediccionPage() {
-  const [dias,    setDias]    = useState(30)
-  const [pags,    dispatch]   = useReducer(
+  const [dias, setDias] = useState(30)
+  const [calculado, setCalculado] = useState(false)
+  const [pags, dispatch] = useReducer(
     pagReducer,
     Object.fromEntries(ESPECIES.map(e => [e.key, 1]))
   )
-
-  const { data, isLoading, refetch, isFetching } = usePrediccionTodas(dias)
-
+  const { data, isLoading, refetch, isFetching } = usePrediccionTodas(dias, calculado)
   const handleCambioDias = useCallback((n: number) => {
     setDias(n)
-    dispatch({ type: 'reset' })
+    dispatch({ kind: 'reset' })
   }, [])
-
+  const handleCalcular = useCallback((n?: number) => {
+    const diasFinal = n ?? dias
+    setDias(diasFinal)
+    setCalculado(true)
+    dispatch({ kind: 'reset' })
+  }, [dias])
   const totalEsps  = data ? Object.values(data).filter((r: any) => !r.error).length : 0
   const totalPreds = data
-    ? Object.values(data).reduce((acc: number, r: any) => acc + (r.prediccion_produccion?.predicciones?.length ?? 0), 0)
+    ? Object.values(data).reduce(
+        (acc: number, r: any) => acc + (r.prediccion_produccion?.predicciones?.length ?? 0),
+        0
+      )
     : 0
-
   return (
     <div style={{ width: '100%', padding: '0 0 40px' }}>
       <style>{GLOBAL_CSS}</style>
-
       {/* ── Header ── */}
       <div style={{ marginBottom: 24, paddingTop: 4 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
@@ -1048,12 +1006,11 @@ export default function PrediccionPage() {
               Predicción de Demanda
             </h1>
             <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4, marginBottom: 0 }}>
-              Regresión lineal sobre datos históricos
-              {totalEsps > 0 && ` · ${totalEsps} especies activas`}
+              Ensemble (Regresión lineal · Ridge · SVR · Holt-Winters)
+              {totalEsps > 0  && ` · ${totalEsps} especies activas`}
               {totalPreds > 0 && ` · ${totalPreds} predicciones cargadas`}
             </p>
           </div>
-          {/* Indicador de carga */}
           {isFetching && !isLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#9ca3af' }}>
               <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>↺</span>
@@ -1062,25 +1019,37 @@ export default function PrediccionPage() {
           )}
         </div>
       </div>
-
       {/* ── Panel de entrenamiento ── */}
       <PanelEntrenamiento />
-
       {/* ── Selector de días ── */}
       <SelectorDias
         dias={dias}
         onCambio={handleCambioDias}
+        onCalcular={handleCalcular}
         onActualizar={() => refetch()}
         isFetching={isFetching}
       />
-
+      {/* ── Estado vacío antes de calcular ── */}
+      {!calculado && !isLoading && (
+        <div style={{
+          textAlign: 'center', padding: '60px 20px',
+          background: '#fff', border: '1px solid #e5e7eb',
+          borderRadius: 14,
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🔢</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+            Configura el horizonte y pulsa Calcular
+          </div>
+          <div style={{ fontSize: 13, color: '#9ca3af' }}>
+            Elige los días a predecir y presiona el botón para ver las predicciones.
+          </div>
+        </div>
+      )}
       {/* ── Alerta déficit ── */}
-      {data && <BannerAlerta data={data} />}
-
+      {calculado && data && <BannerAlerta data={data} />}
       {/* ── Contenido principal ── */}
-      {isLoading && <SkeletonCards />}
-
-      {!isLoading && data && (
+      {calculado && isLoading && <SkeletonCards />}
+      {calculado && !isLoading && data && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {ESPECIES.map(({ key, label, unidad, color, icon }) => {
             const r = data[key]
@@ -1095,21 +1064,22 @@ export default function PrediccionPage() {
                 especieClave={key}
                 resultado={r}
                 pagina={pags[key]}
-                onPaginaChange={p => dispatch({ key, page: p })}
+                onPaginaChange={p => dispatch({ kind: 'set', key, page: p })}
               />
             )
           })}
         </div>
       )}
-
-      {/* ── Sin datos ── */}
-      {!isLoading && !data && (
+      {/* ── Sin datos (solo si ya calculó y no vino nada) ── */}
+      {calculado && !isLoading && !data && (
         <div style={{
           textAlign: 'center', padding: '60px 20px',
           background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14,
         }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Sin datos de predicción</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+            Sin datos de predicción
+          </div>
           <div style={{ fontSize: 13, color: '#9ca3af' }}>
             Verifica que el backend esté activo y que haya datos de producción registrados.
           </div>
