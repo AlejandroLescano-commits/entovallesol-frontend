@@ -65,6 +65,7 @@ export const getPrediccion = (especie: string, dias: number) =>
 export const getPrediccionTodas = (dias: number) =>
   api.get("/prediccion/todas", { params: { dias } }).then((r) => r.data);
 
+// ── Entrenamiento ─────────────────────────────────────────────────────────────
 export const getModeloConfig = () =>
   api.get("/internal/config").then((r) => r.data);
 
@@ -76,7 +77,8 @@ export const updateModeloConfig = (
 
 export const getModeloKpis = (especie: string) =>
   api.get(`/internal/kpis/${especie}`).then((r) => r.data);
+
 export const entrenarModelo = (especie?: string) =>
   api.post("/internal/entrenar/manual", null, {
     params: especie ? { especie } : undefined,
-  }).then((r) => r.data)
+  }).then((r) => r.data);
