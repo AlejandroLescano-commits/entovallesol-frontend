@@ -4,16 +4,16 @@ import {
   getModeloConfig,
   updateModeloConfig,
   getModeloKpis,
+  entrenarModelo,
 } from '../services/produccionApi'
 
-import { entrenarModelo } from '../services/produccionApi'
-
-// Predicción completa (todas las especies)
-export const usePrediccionTodas = (dias: number) =>
+// Predicción completa (todas las especies) — NO se dispara al montar
+export const usePrediccionTodas = (dias: number, enabled: boolean) =>
   useQuery({
-    queryKey: ['prediccion', 'todas', dias],
-    queryFn:  () => getPrediccionTodas(dias),
-    staleTime: 1000 * 60 * 5, // 5 min — no re-fetch en cada render
+    queryKey:  ['prediccion', 'todas', dias],
+    queryFn:   () => getPrediccionTodas(dias),
+    staleTime: 1000 * 60 * 5,
+    enabled,                    // ← solo corre cuando el padre lo activa
   })
 
 // Configuración de modelos (ON/OFF, rango)
@@ -30,8 +30,7 @@ export const useModeloKpis = (especie: string) =>
     queryFn:  () => getModeloKpis(especie),
   })
 
-
-  export const useEntrenarModelo = () => {
+export const useEntrenarModelo = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (especie?: string) => entrenarModelo(especie),
@@ -42,7 +41,6 @@ export const useModeloKpis = (especie: string) =>
   })
 }
 
-// Mutación para cambiar ON/OFF o rango
 export const useUpdateModeloConfig = () => {
   const qc = useQueryClient()
   return useMutation({
