@@ -237,3 +237,83 @@ export const usePrediccionTodas = (dias: number) =>
     queryKey: ["prediccion_todas", dias],
     queryFn: () => getPrediccionTodas(dias),
   });
+
+const okEliminar = (qc: ReturnType<typeof useQueryClient>, ...keys: string[]) => () => {
+  keys.forEach(k => qc.invalidateQueries({ queryKey: [k] }));
+  toast.success("Registro eliminado permanentemente");
+};
+
+const errEliminar = (err: any) =>
+  toast.error(err?.response?.data?.detail ?? "Error al eliminar");
+
+export const useEliminarSitotroga = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/sitotroga/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "sitotroga"),
+    onError: errEliminar,
+  });
+};
+
+export const useEliminarTrichogramma = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/trichogramma/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "trichogramma"),
+    onError: errEliminar,
+  });
+};
+
+export const useEliminarGalleria = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/galleria/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "galleria"),
+    onError: errEliminar,
+  });
+};
+
+export const useEliminarParatheresia = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/paratheresia/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "paratheresia"),
+    onError: errEliminar,
+  });
+};
+
+export const useEliminarNotaSitodroga = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/notas/sitodroga/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "notas_sitodroga", "trichogramma"),
+    onError: errEliminar,
+  });
+};
+
+export const useEliminarNotaAvispitas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/notas/avispitas/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "notas_avispitas"),
+    onError: errEliminar,
+  });
+};
+
+export const useEliminarNotaMoscas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/notas/moscas/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "notas_moscas"),
+    onError: errEliminar,
+  });
+};
+
+export const useEliminarNotaGalleria = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/produccion/notas/galleria/${id}/eliminar`).then(r => r.data),
+    onSuccess: okEliminar(qc, "notas_galleria", "paratheresia"),
+    onError: errEliminar,
+  });
+};
