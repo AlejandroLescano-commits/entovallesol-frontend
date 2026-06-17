@@ -1,78 +1,13 @@
 import { useState } from 'react'
 import {
-  useSitotroga, useCreateSitotroga, useAnularSitotroga,
-  useNotasSitodroga, useCreateNotaSitodroga, useAnularNotaSitodroga,
+  useSitotroga, useCreateSitotroga, useAnularSitotroga, useEliminarSitotroga,
+  useNotasSitodroga, useCreateNotaSitodroga, useAnularNotaSitodroga, useEliminarNotaSitodroga,
   useUnidadesSitodroga,
 } from '@/hooks/useProduccion'
 import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
 
-// ─── Constantes de validación ────────────────────────────────────────────────
-const CANTIDAD_MAX    = 10_000_000
-const CANTIDAD_MIN    = 0.01
-const FACTOR_MIN      = -9999.99   // el factor puede ser negativo (ajuste)
-const FACTOR_MAX      = 9999.99
-const PLANCHAS_MAX    = 100_000
-const DESCRIPCION_MAX = 500
-const HOY = new Date().toISOString().split('T')[0]
-const FECHA_MIN = new Date(new Date().setFullYear(new Date().getFullYear() - 5))
-  .toISOString().split('T')[0]
-
-// ─── Tipos ───────────────────────────────────────────────────────────────────
-type ProdErrors = { fecha?: string; cantidad?: string }
-type NotaErrors = { fecha?: string; cantidad?: string; factor?: string; descripcion?: string }
-
-// ─── Validadores ─────────────────────────────────────────────────────────────
-function validarFecha(v: string): string | undefined {
-  if (!v) return 'La fecha es obligatoria.'
-  if (v > HOY) return 'La fecha no puede ser futura.'
-  if (v < FECHA_MIN) return `No puede ser anterior a ${FECHA_MIN}.`
-}
-
-function validarCantidad(v: string, label = 'La cantidad'): string | undefined {
-  if (!v || v.trim() === '') return `${label} es obligatoria.`
-  const n = Number(v)
-  if (isNaN(n)) return 'Debe ser un número válido.'
-  if (n <= 0) return 'Debe ser mayor a 0.'
-  if (n < CANTIDAD_MIN) return `Mínimo: ${CANTIDAD_MIN}.`
-  if (n > CANTIDAD_MAX) return `Máximo: ${CANTIDAD_MAX.toLocaleString()}.`
-  if (!/^\d+(\.\d{1,2})?$/.test(v.trim())) return 'Máximo 2 decimales.'
-}
-
-function validarPlanchas(v: string): string | undefined {
-  if (!v || v.trim() === '') return 'Las planchas son obligatorias.'
-  const n = Number(v)
-  if (isNaN(n)) return 'Debe ser un número válido.'
-  if (n <= 0) return 'Debe ser mayor a 0.'
-  if (n < CANTIDAD_MIN) return `Mínimo: ${CANTIDAD_MIN}.`
-  if (n > PLANCHAS_MAX) return `Máximo: ${PLANCHAS_MAX.toLocaleString()} planchas.`
-  if (!/^\d+(\.\d{1,2})?$/.test(v.trim())) return 'Máximo 2 decimales.'
-}
-
-function validarFactor(v: string): string | undefined {
-  if (!v || v.trim() === '') return 'El factor es obligatorio para T.exiguum.'
-  const n = Number(v)
-  if (isNaN(n)) return 'Debe ser un número válido.'
-  if (n < FACTOR_MIN) return `Mínimo: ${FACTOR_MIN}.`
-  if (n > FACTOR_MAX) return `Máximo: ${FACTOR_MAX}.`
-  if (!/^-?\d+(\.\d{1,2})?$/.test(v.trim())) return 'Máximo 2 decimales.'
-}
-
-function validarDescripcion(v: string): string | undefined {
-  if (v.length > DESCRIPCION_MAX) return `Máximo ${DESCRIPCION_MAX} caracteres (actual: ${v.length}).`
-}
-
-function hasErrors(e: Record<string, string | undefined>) {
-  return Object.values(e).some(Boolean)
-}
-
-function FieldError({ msg }: { msg?: string }) {
-  if (!msg) return null
-  return <div className="invalid-feedback d-block" style={{ fontSize: '.78rem' }}>{msg}</div>
-}
-
-// ─── Utilidades ───────────────────────────────────────────────────────────────
 function usePagination<T>(data: T[]) {
   const [page, setPage] = useState(1)
   const total = Math.ceil(data.length / PAGE_SIZE) || 1
@@ -91,7 +26,8 @@ function Pagination({ page, total, setPage }: { page: number; total: number; set
           .filter(p => p === 1 || p === total || Math.abs(p - page) <= 1)
           .reduce<(number | '...')[]>((acc, p, i, arr) => {
             if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...')
-            acc.push(p); return acc
+            acc.push(p)
+            return acc
           }, [])
           .map((p, i) =>
             p === '...'
@@ -104,16 +40,18 @@ function Pagination({ page, total, setPage }: { page: number; total: number; set
   )
 }
 
-function ConfirmModal({ mensaje, onConfirm, onCancel }: { mensaje: string; onConfirm: () => void; onCancel: () => void }) {
+function ConfirmModal({ mensaje, accionLabel = 'Anular', onConfirm, onCancel }: { mensaje: string; accionLabel?: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }}>
       <div className="modal-dialog modal-sm modal-dialog-centered">
         <div className="modal-content">
-          <div className="modal-header border-0 pb-0"><h6 className="modal-title fw-bold text-danger">⚠ Confirmar anulación</h6></div>
+          <div className="modal-header border-0 pb-0">
+            <h6 className="modal-title fw-bold text-danger">⚠ Confirmar {accionLabel.toLowerCase()}</h6>
+          </div>
           <div className="modal-body pt-2" style={{ fontSize: '.88rem' }}>{mensaje}</div>
           <div className="modal-footer border-0 pt-0 gap-2">
             <button className="btn btn-sm btn-secondary" onClick={onCancel}>Cancelar</button>
-            <button className="btn btn-sm btn-danger" onClick={onConfirm}>Anular</button>
+            <button className="btn btn-sm btn-danger" onClick={onConfirm}>{accionLabel}</button>
           </div>
         </div>
       </div>
@@ -154,8 +92,7 @@ function DetailModal({ title, fields, onClose }: { title: string; fields: { labe
 const fmt = (v: string | null | undefined) =>
   v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : null
 
-const INIT_FORM = { fecha: '', id_unidad: '', cantidad: '' }
-const INIT_NOTA = { fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' }
+type Confirm = { id: number; tipo: 'produccion' | 'nota'; accion: 'anular' | 'eliminar'; mensaje: string }
 
 export default function SitotrogaPage() {
   const { data: registros = [], isLoading } = useSitotroga()
@@ -165,124 +102,63 @@ export default function SitotrogaPage() {
   const crearNota = useCreateNotaSitodroga()
   const anular = useAnularSitotroga()
   const anularNota = useAnularNotaSitodroga()
+  const eliminar = useEliminarSitotroga()
+  const eliminarNota = useEliminarNotaSitodroga()
 
   const [tab, setTab] = useState<'produccion' | 'notas'>('produccion')
   const [showModal, setShowModal] = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
-  const [confirm, setConfirm] = useState<{ id: number; tipo: 'produccion' | 'nota'; mensaje: string } | null>(null)
+  const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [detail, setDetail] = useState<{ data: any; tipo: 'produccion' | 'nota' } | null>(null)
 
-  const [form, setForm] = useState(INIT_FORM)
-  const [formErrors, setFormErrors] = useState<ProdErrors>({})
-  const [formTouched, setFormTouched] = useState<Partial<Record<keyof ProdErrors, boolean>>>({})
-
-  const [notaForm, setNotaForm] = useState(INIT_NOTA)
-  const [notaErrors, setNotaErrors] = useState<NotaErrors>({})
-  const [notaTouched, setNotaTouched] = useState<Partial<Record<keyof NotaErrors, boolean>>>({})
+  const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
+  const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' })
 
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
 
   const esExiguum = notaForm.tiposalida === 'T.exiguum'
-
-  // Cantidad convertida en gramos: planchas × 12.5 + factor
-  const cantidadConvertida =
-    esExiguum && notaForm.cantidad && notaForm.factor
-      ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor)
-      : null
-
-  const trichogrammaGenerado =
-    esExiguum && notaForm.cantidad
-      ? Number(notaForm.cantidad) * 80
-      : null
-
-  // ── Validadores de formulario ───────────────────────────────────────────
-  const validateProd = (f: typeof form): ProdErrors => ({
-    fecha: validarFecha(f.fecha),
-    cantidad: validarCantidad(f.cantidad, 'La cantidad'),
-  })
-
-  const validateNota = (f: typeof notaForm): NotaErrors => {
-    const esEx = f.tiposalida === 'T.exiguum'
-    return {
-      fecha: validarFecha(f.fecha),
-      cantidad: esEx ? validarPlanchas(f.cantidad) : validarCantidad(f.cantidad, 'La cantidad'),
-      factor: esEx ? validarFactor(f.factor) : undefined,
-      descripcion: validarDescripcion(f.descripcion),
-    }
-  }
-
-  const setProdField = (key: keyof typeof form, value: string) => {
-    const next = { ...form, [key]: value }
-    setForm(next)
-    if (formTouched[key as keyof ProdErrors]) setFormErrors(validateProd(next))
-  }
-
-  const setNotaField = (key: keyof typeof notaForm, value: string) => {
-    const next = { ...notaForm, [key]: value }
-    setNotaForm(next)
-    if (notaTouched[key as keyof NotaErrors]) setNotaErrors(validateNota(next))
-  }
-
-  const touchProd = (field: keyof ProdErrors) => {
-    setFormTouched(t => ({ ...t, [field]: true }))
-    setFormErrors(validateProd(form))
-  }
-
-  const touchNota = (field: keyof NotaErrors) => {
-    setNotaTouched(t => ({ ...t, [field]: true }))
-    setNotaErrors(validateNota(notaForm))
-  }
+  const cantidadConvertida = esExiguum && notaForm.cantidad
+    ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor || 0) : null
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setFormTouched({ fecha: true, cantidad: true })
-    const errs = validateProd(form)
-    setFormErrors(errs)
-    if (hasErrors(errs)) { toast.error('Corrige los errores antes de guardar.'); return }
+    if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
     crear.mutate(
       { ...form, cantidad: Number(form.cantidad), id_unidad: form.id_unidad ? Number(form.id_unidad) : null },
-      { onSuccess: () => { setShowModal(false); setForm(INIT_FORM); setFormErrors({}); setFormTouched({}) } }
+      { onSuccess: () => { setShowModal(false); setForm({ fecha: '', id_unidad: '', cantidad: '' }) } }
     )
   }
 
   const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setNotaTouched({ fecha: true, cantidad: true, factor: true, descripcion: true })
-    const errs = validateNota(notaForm)
-    setNotaErrors(errs)
-    if (hasErrors(errs)) { toast.error('Corrige los errores antes de guardar.'); return }
-    const cantidadFinal = esExiguum
-      ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor)
-      : Number(notaForm.cantidad)
+    if (!notaForm.fecha || !notaForm.cantidad) return toast.error('Completa los campos requeridos')
+    if (esExiguum && !notaForm.factor) return toast.error('El factor es obligatorio para T.exiguum')
+    const cantidadFinal = esExiguum ? Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor) : Number(notaForm.cantidad)
     crearNota.mutate(
-      {
-        ...notaForm,
-        cantidad: cantidadFinal,
-        factor: esExiguum ? Number(notaForm.factor) : 1,
-        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
-      },
-      {
-        onSuccess: () => {
-          setShowNotaModal(false); setNotaForm(INIT_NOTA)
-          setNotaErrors({}); setNotaTouched({})
-        },
-      }
+      { ...notaForm, cantidad: cantidadFinal, factor: esExiguum ? Number(notaForm.factor) : 1, id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null },
+      { onSuccess: () => { setShowNotaModal(false); setNotaForm({ fecha: '', tiposalida: 'T.exiguum', descripcion: '', id_unidad: '', factor: '1', cantidad: '' }) } }
     )
   }
 
-  const cerrarProd = () => { setShowModal(false); setForm(INIT_FORM); setFormErrors({}); setFormTouched({}) }
-  const cerrarNota = () => { setShowNotaModal(false); setNotaForm(INIT_NOTA); setNotaErrors({}); setNotaTouched({}) }
-
   const pedirConfirm = (id: number, tipo: 'produccion' | 'nota', extra?: string) => {
     const base = tipo === 'produccion' ? 'Se anulará este registro de producción.' : 'Se anulará esta nota de salida.'
-    setConfirm({ id, tipo, mensaje: base + (extra ? ` ${extra}` : '') })
+    setConfirm({ id, tipo, accion: 'anular', mensaje: base + (extra ? ` ${extra}` : '') })
   }
 
-  const ejecutarAnulacion = () => {
+  const pedirConfirmEliminar = (id: number, tipo: 'produccion' | 'nota', extra?: string) => {
+    const base = tipo === 'produccion' ? 'Esto borrará el registro de producción de forma permanente.' : 'Esto borrará la nota de salida de forma permanente.'
+    setConfirm({ id, tipo, accion: 'eliminar', mensaje: base + (extra ? ` ${extra}` : '') + ' No se puede deshacer.' })
+  }
+
+  const ejecutarAccion = () => {
     if (!confirm) return
-    if (confirm.tipo === 'produccion') anular.mutate(confirm.id, { onSettled: () => setConfirm(null) })
-    else anularNota.mutate(confirm.id, { onSettled: () => setConfirm(null) })
+    const { id, tipo, accion } = confirm
+    const mutation =
+      accion === 'anular'
+        ? (tipo === 'produccion' ? anular : anularNota)
+        : (tipo === 'produccion' ? eliminar : eliminarNota)
+    mutation.mutate(id, { onSettled: () => setConfirm(null) })
   }
 
   const detailFields = detail
@@ -315,7 +191,14 @@ export default function SitotrogaPage() {
 
   return (
     <div>
-      {confirm && <ConfirmModal mensaje={confirm.mensaje} onConfirm={ejecutarAnulacion} onCancel={() => setConfirm(null)} />}
+      {confirm && (
+        <ConfirmModal
+          mensaje={confirm.mensaje}
+          accionLabel={confirm.accion === 'eliminar' ? 'Eliminar' : 'Anular'}
+          onConfirm={ejecutarAccion}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
       {detail && (
         <DetailModal
           title={detail.tipo === 'produccion' ? 'Detalle — Producción Sitotroga' : 'Detalle — Nota de Salida Sitotroga'}
@@ -370,9 +253,12 @@ export default function SitotrogaPage() {
                             <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
                             <td className="d-flex gap-1">
                               <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: r, tipo: 'produccion' })}>👁</button>
-                              {r.activo && (
+                              {r.activo ? (
                                 <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anular.isPending}
                                   onClick={() => pedirConfirm(r.id, 'produccion')}>Anular</button>
+                              ) : (
+                                <button className="btn btn-sm btn-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={eliminar.isPending} title="Eliminar permanentemente"
+                                  onClick={() => pedirConfirmEliminar(r.id, 'produccion')}>🗑</button>
                               )}
                             </td>
                           </tr>
@@ -409,9 +295,12 @@ export default function SitotrogaPage() {
                       <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
                       <td className="d-flex gap-1">
                         <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: n, tipo: 'nota' })}>👁</button>
-                        {n.activo && (
+                        {n.activo ? (
                           <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anularNota.isPending}
                             onClick={() => pedirConfirm(n.id, 'nota', n.tiposalida === 'T.exiguum' ? 'También se revertirá el registro de Trichogramma generado.' : '')}>Anular</button>
+                        ) : (
+                          <button className="btn btn-sm btn-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={eliminarNota.isPending} title="Eliminar permanentemente"
+                            onClick={() => pedirConfirmEliminar(n.id, 'nota', n.tiposalida === 'T.exiguum' ? 'También se eliminará el registro de Trichogramma generado.' : '')}>🗑</button>
                         )}
                       </td>
                     </tr>
@@ -423,50 +312,21 @@ export default function SitotrogaPage() {
         </div>
       )}
 
-      {/* ── Modal Producción ─────────────────────────────────────────────── */}
       {showModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Nuevo registro — Sitotroga</h5>
-              <button className="btn-close" onClick={cerrarProd} />
-            </div>
-            <form onSubmit={handleSubmit} noValidate>
+            <div className="modal-header"><h5 className="modal-title">Nuevo registro — Sitotroga</h5><button className="btn-close" onClick={() => setShowModal(false)} /></div>
+            <form onSubmit={handleSubmit}>
               <div className="modal-body d-flex flex-column gap-3">
-                <div>
-                  <label className="form-label fw-semibold">Fecha *</label>
-                  <input
-                    type="date" max={HOY} min={FECHA_MIN}
-                    className={`form-control ${formTouched.fecha && formErrors.fecha ? 'is-invalid' : formTouched.fecha && !formErrors.fecha ? 'is-valid' : ''}`}
-                    value={form.fecha}
-                    onChange={e => setProdField('fecha', e.target.value)}
-                    onBlur={() => touchProd('fecha')}
-                  />
-                  <FieldError msg={formTouched.fecha ? formErrors.fecha : undefined} />
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Cantidad (g) *</label>
-                  <input
-                    type="number" step="0.01" min={CANTIDAD_MIN} max={CANTIDAD_MAX}
-                    className={`form-control ${formTouched.cantidad && formErrors.cantidad ? 'is-invalid' : formTouched.cantidad && !formErrors.cantidad ? 'is-valid' : ''}`}
-                    value={form.cantidad}
-                    placeholder={`Ej: 250 (máx ${CANTIDAD_MAX.toLocaleString()})`}
-                    onChange={e => setProdField('cantidad', e.target.value)}
-                    onBlur={() => touchProd('cantidad')}
-                  />
-                  <FieldError msg={formTouched.cantidad ? formErrors.cantidad : undefined} />
-                  <small className="text-muted" style={{ fontSize: '.75rem' }}>Valor positivo, hasta 2 decimales.</small>
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Unidad de medida</label>
-                  <select className="form-select" value={form.id_unidad} onChange={e => setProdField('id_unidad', e.target.value)}>
-                    <option value="">— Seleccionar —</option>
-                    {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                  </select>
-                </div>
+                <div><label className="form-label fw-semibold">Fecha *</label><input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Cantidad (g) *</label><input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Unidad de medida</label>
+                  <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
+                    <option value="">— Seleccionar —</option>{unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                  </select></div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={cerrarProd}>Cancelar</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
                 <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </form>
@@ -474,127 +334,39 @@ export default function SitotrogaPage() {
         </div>
       )}
 
-      {/* ── Modal Nota de Salida ─────────────────────────────────────────── */}
       {showNotaModal && (
         <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
           <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Nota de Salida — Sitotroga</h5>
-              <button className="btn-close" onClick={cerrarNota} />
-            </div>
-            <form onSubmit={handleNotaSubmit} noValidate>
+            <div className="modal-header"><h5 className="modal-title">Nota de Salida — Sitotroga</h5><button className="btn-close" onClick={() => setShowNotaModal(false)} /></div>
+            <form onSubmit={handleNotaSubmit}>
               <div className="modal-body d-flex flex-column gap-3">
-                <div>
-                  <label className="form-label fw-semibold">Fecha *</label>
-                  <input
-                    type="date" max={HOY} min={FECHA_MIN}
-                    className={`form-control ${notaTouched.fecha && notaErrors.fecha ? 'is-invalid' : notaTouched.fecha && !notaErrors.fecha ? 'is-valid' : ''}`}
-                    value={notaForm.fecha}
-                    onChange={e => setNotaField('fecha', e.target.value)}
-                    onBlur={() => touchNota('fecha')}
-                  />
-                  <FieldError msg={notaTouched.fecha ? notaErrors.fecha : undefined} />
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Tipo de salida *</label>
-                  <select
-                    className="form-select"
-                    value={notaForm.tiposalida}
-                    onChange={e => {
-                      // Al cambiar tipo, limpiar cantidad y factor para evitar datos inconsistentes
-                      const next = { ...notaForm, tiposalida: e.target.value, factor: '1', cantidad: '' }
-                      setNotaForm(next)
-                      setNotaTouched({})
-                      setNotaErrors({})
-                    }}
-                  >
-                    <option value="T.exiguum">T. exiguum</option>
-                    <option value="T.pretiosum">T. pretiosum</option>
-                    <option value="Crysopas">Crysopas</option>
-                    <option value="Infestación">Infestación</option>
-                    <option value="Ventas">Ventas</option>
-                  </select>
-                </div>
-
-                {/* Planchas o Cantidad según tipo */}
+                <div><label className="form-label fw-semibold">Fecha *</label><input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
+                <div><label className="form-label fw-semibold">Tipo de salida *</label>
+                  <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value, factor: '1', cantidad: '' }))}>
+                    <option value="T.exiguum">T. exiguum</option><option value="T.pretiosum">T. pretiosum</option>
+                    <option value="Crysopas">Crysopas</option><option value="Infestación">Infestación</option><option value="Ventas">Ventas</option>
+                  </select></div>
                 <div>
                   <label className="form-label fw-semibold">{esExiguum ? 'Planchas *' : 'Cantidad (g) *'}</label>
-                  <input
-                    type="number" step="0.01"
-                    min={CANTIDAD_MIN}
-                    max={esExiguum ? PLANCHAS_MAX : CANTIDAD_MAX}
-                    className={`form-control ${notaTouched.cantidad && notaErrors.cantidad ? 'is-invalid' : notaTouched.cantidad && !notaErrors.cantidad ? 'is-valid' : ''}`}
-                    value={notaForm.cantidad}
-                    placeholder={esExiguum ? `Nº de planchas (máx ${PLANCHAS_MAX.toLocaleString()})` : `Gramos (máx ${CANTIDAD_MAX.toLocaleString()})`}
-                    onChange={e => setNotaField('cantidad', e.target.value)}
-                    onBlur={() => touchNota('cantidad')}
-                  />
-                  <FieldError msg={notaTouched.cantidad ? notaErrors.cantidad : undefined} />
-                  {esExiguum && notaForm.cantidad && !notaErrors.cantidad && (
-                    <small className="text-muted mt-1 d-block">
-                      = {(Number(notaForm.cantidad) * 12.5 + Number(notaForm.factor || 0)).toLocaleString('es-PE', { maximumFractionDigits: 2 })} g descontados de Sitotroga
-                    </small>
-                  )}
+                  <input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required />
+                  {esExiguum && notaForm.cantidad && <small className="text-muted mt-1 d-block">= {cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g descontados de Sitotroga</small>}
                 </div>
-
-                {/* Factor (solo T.exiguum) */}
                 {esExiguum && (
                   <div>
-                    <label className="form-label fw-semibold">
-                      Factor *
-                      <span className="text-muted fw-normal ms-1" style={{ fontSize: '.78rem' }}>(ajuste en gramos)</span>
-                    </label>
-                    <input
-                      type="number" step="0.01"
-                      min={FACTOR_MIN} max={FACTOR_MAX}
-                      className={`form-control ${notaTouched.factor && notaErrors.factor ? 'is-invalid' : notaTouched.factor && !notaErrors.factor ? 'is-valid' : ''}`}
-                      value={notaForm.factor}
-                      placeholder={`Factor de ajuste (${FACTOR_MIN} a ${FACTOR_MAX})`}
-                      onChange={e => setNotaField('factor', e.target.value)}
-                      onBlur={() => touchNota('factor')}
-                    />
-                    <FieldError msg={notaTouched.factor ? notaErrors.factor : undefined} />
-                    <small className="text-muted mt-1 d-block" style={{ fontSize: '.75rem' }}>
-                      Fórmula: planchas × 12.5 + factor = gramos
-                      {notaForm.cantidad && !notaErrors.cantidad && !notaErrors.factor && cantidadConvertida !== null && (
-                        <> → <strong>{cantidadConvertida.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g</strong></>
-                      )}
-                    </small>
-                    {notaForm.cantidad && !notaErrors.cantidad && trichogrammaGenerado !== null && (
-                      <small className="text-success mt-1 d-block fw-semibold" style={{ fontSize: '.78rem' }}>
-                        También suma {trichogrammaGenerado.toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg² al saldo de Trichogramma
-                      </small>
-                    )}
+                    <label className="form-label fw-semibold">Factor *</label>
+                    <input type="number" step="0.01" className="form-control" value={notaForm.factor} onChange={e => setNotaForm(f => ({ ...f, factor: e.target.value }))} required />
+                    <small className="text-muted mt-1 d-block">Fórmula: planchas × 12.5 + factor = gramos{notaForm.cantidad && <> → <strong>{cantidadConvertida?.toLocaleString('es-PE', { maximumFractionDigits: 2 })} g</strong></>}</small>
+                    {notaForm.cantidad && <small className="text-success mt-1 d-block fw-semibold">También suma {(Number(notaForm.cantidad) * 80).toLocaleString('es-PE', { maximumFractionDigits: 2 })} pulg² al saldo de Trichogramma</small>}
                   </div>
                 )}
-
-                <div>
-                  <label className="form-label fw-semibold">
-                    Descripción
-                    <span className="text-muted fw-normal ms-1" style={{ fontSize: '.78rem' }}>
-                      ({notaForm.descripcion.length}/{DESCRIPCION_MAX})
-                    </span>
-                  </label>
-                  <textarea
-                    className={`form-control ${notaTouched.descripcion && notaErrors.descripcion ? 'is-invalid' : ''}`}
-                    rows={2} maxLength={DESCRIPCION_MAX}
-                    placeholder="Observaciones opcionales..."
-                    value={notaForm.descripcion}
-                    onChange={e => setNotaField('descripcion', e.target.value)}
-                    onBlur={() => touchNota('descripcion')}
-                  />
-                  <FieldError msg={notaTouched.descripcion ? notaErrors.descripcion : undefined} />
-                </div>
-                <div>
-                  <label className="form-label fw-semibold">Unidad de medida</label>
-                  <select className="form-select" value={notaForm.id_unidad} onChange={e => setNotaField('id_unidad', e.target.value)}>
-                    <option value="">— Seleccionar —</option>
-                    {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                  </select>
-                </div>
+                <div><label className="form-label fw-semibold">Descripción</label><textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
+                <div><label className="form-label fw-semibold">Unidad de medida</label>
+                  <select className="form-select" value={notaForm.id_unidad} onChange={e => setNotaForm(f => ({ ...f, id_unidad: e.target.value }))}>
+                    <option value="">— Seleccionar —</option>{unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                  </select></div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={cerrarNota}>Cancelar</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
                 <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </form>
