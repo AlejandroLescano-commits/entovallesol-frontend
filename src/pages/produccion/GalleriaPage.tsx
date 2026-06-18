@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   useGalleria, useCreateGalleria, useAnularGalleria, useEliminarGalleria,
   useNotasGalleria, useCreateNotaGalleria, useAnularNotaGalleria, useEliminarNotaGalleria,
@@ -8,20 +8,39 @@ import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
 
-function usePagination(data) {
+function usePagination<T>(data: T[]) {
   const [page, setPage] = useState(1)
   const total = Math.ceil(data.length / PAGE_SIZE) || 1
   const slice = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   return { slice, page, total, setPage }
 }
 
+// ── Tipos compartidos ─────────────────────────────────────────────────────────
+interface DetailState {
+  data: any
+  tipo: 'produccion' | 'nota'
+}
+
+interface ConfirmState {
+  id: number
+  tipo: 'produccion' | 'nota'
+  accion: 'anular' | 'eliminar'
+  mensaje: string
+}
+
 // ── Paginación ────────────────────────────────────────────────────────────────
-function Pagination({ page, total, setPage }) {
+interface PaginationProps {
+  page: number
+  total: number
+  setPage: (page: number) => void
+}
+
+function Pagination({ page, total, setPage }: PaginationProps) {
   if (total <= 1) return null
   const pages = Array.from({ length: total }, (_, i) => i + 1)
     .filter(p => p === 1 || p === total || Math.abs(p - page) <= 1)
-    .reduce((acc, p, i, arr) => {
-      if (i > 0 && p - arr[i - 1] > 1) acc.push('...')
+    .reduce<(number | string)[]>((acc, p, i, arr) => {
+      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...')
       acc.push(p)
       return acc
     }, [])
@@ -44,7 +63,7 @@ function Pagination({ page, total, setPage }) {
             : <button
                 key={p}
                 className={`vs-page-btn ${page === p ? 'active' : ''}`}
-                onClick={() => setPage(p)}
+                onClick={() => setPage(p as number)}
               >{p}</button>
         )}
         <button className="vs-page-btn" disabled={page === total} onClick={() => setPage(page + 1)}>
@@ -56,7 +75,14 @@ function Pagination({ page, total, setPage }) {
 }
 
 // ── Modal de confirmación ─────────────────────────────────────────────────────
-function ConfirmModal({ mensaje, accionLabel = 'Anular', onConfirm, onCancel }) {
+interface ConfirmModalProps {
+  mensaje: ReactNode
+  accionLabel?: string
+  onConfirm: () => void
+  onCancel: () => void
+}
+
+function ConfirmModal({ mensaje, accionLabel = 'Anular', onConfirm, onCancel }: ConfirmModalProps) {
   const isEliminar = accionLabel === 'Eliminar'
   return (
     <div className="vs-overlay">
@@ -93,7 +119,18 @@ function ConfirmModal({ mensaje, accionLabel = 'Anular', onConfirm, onCancel }) 
 }
 
 // ── Modal de detalle ──────────────────────────────────────────────────────────
-function DetailModal({ title, fields, onClose }) {
+interface DetailField {
+  label: string
+  value: ReactNode
+}
+
+interface DetailModalProps {
+  title: string
+  fields: DetailField[]
+  onClose: () => void
+}
+
+function DetailModal({ title, fields, onClose }: DetailModalProps) {
   return (
     <div className="vs-overlay" onClick={onClose}>
       <div className="vs-dialog" onClick={e => e.stopPropagation()}>
@@ -122,7 +159,14 @@ function DetailModal({ title, fields, onClose }) {
 }
 
 // ── Tarjeta de métrica ────────────────────────────────────────────────────────
-function MetricCard({ icon, label, value, color = 'var(--vs-primary)' }) {
+interface MetricCardProps {
+  icon: string
+  label: string
+  value: number | string
+  color?: string
+}
+
+function MetricCard({ icon, label, value, color = 'var(--vs-primary)' }: MetricCardProps) {
   return (
     <div className="vs-metric-card">
       <div style={{
@@ -140,7 +184,11 @@ function MetricCard({ icon, label, value, color = 'var(--vs-primary)' }) {
 }
 
 // ── Badge de estado ───────────────────────────────────────────────────────────
-function Badge({ activo }) {
+interface BadgeProps {
+  activo: boolean
+}
+
+function Badge({ activo }: BadgeProps) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -155,12 +203,17 @@ function Badge({ activo }) {
 }
 
 // ── Badge de tipo ─────────────────────────────────────────────────────────────
-const TIPO_COLORS = {
+const TIPO_COLORS: Record<string, { bg: string; color: string }> = {
   Paratheresia: { bg: 'var(--vs-primary-soft)', color: 'var(--vs-primary)' },
   Instalacion:  { bg: 'var(--vs-warn-soft)',    color: 'var(--vs-warn)'    },
   Ventas:       { bg: 'var(--vs-success-soft)', color: 'var(--vs-success)' },
 }
-function TipoBadge({ tipo }) {
+
+interface TipoBadgeProps {
+  tipo: string
+}
+
+function TipoBadge({ tipo }: TipoBadgeProps) {
   const c = TIPO_COLORS[tipo] ?? { bg: 'var(--vs-neutral-soft)', color: 'var(--vs-text-muted)' }
   return (
     <span style={{
@@ -171,7 +224,7 @@ function TipoBadge({ tipo }) {
   )
 }
 
-const fmt = v =>
+const fmt = (v?: string | null) =>
   v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : null
 
 // ── Componente principal ──────────────────────────────────────────────────────
@@ -186,11 +239,11 @@ export default function GalleriaPage() {
   const eliminar     = useEliminarGalleria()
   const eliminarNota = useEliminarNotaGalleria()
 
-  const [tab, setTab]               = useState('produccion')
+  const [tab, setTab]               = useState<'produccion' | 'notas'>('produccion')
   const [showModal, setShowModal]   = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
-  const [confirm, setConfirm]       = useState(null)
-  const [detail, setDetail]         = useState(null)
+  const [confirm, setConfirm]       = useState<ConfirmState | null>(null)
+  const [detail, setDetail]         = useState<DetailState | null>(null)
   const [form, setForm]             = useState({ fecha: '', id_unidad: '', cantidad: '' })
   const [notaForm, setNotaForm]     = useState({ fecha: '', tiposalida: 'Paratheresia', descripcion: '', id_unidad: '', cantidad: '', ratio: '' })
   const [ratioCustom, setRatioCustom] = useState(false)
@@ -198,11 +251,11 @@ export default function GalleriaPage() {
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
 
-  const totalActivos  = registros.filter(r => r.activo).length
-  const totalAnulados = registros.filter(r => !r.activo).length
-  const notasActivas  = notas.filter(n => n.activo).length
+  const totalActivos  = registros.filter((r: any) => r.activo).length
+  const totalAnulados = registros.filter((r: any) => !r.activo).length
+  const notasActivas  = notas.filter((n: any) => n.activo).length
 
-  const handleSubmit = e => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
     crear.mutate(
@@ -211,7 +264,7 @@ export default function GalleriaPage() {
     )
   }
 
-  const handleNotaSubmit = e => {
+  const handleNotaSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     crearNota.mutate(
       { ...notaForm, cantidad: Number(notaForm.cantidad), ratio: notaForm.ratio ? Number(notaForm.ratio) : null, id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null },
@@ -234,7 +287,7 @@ export default function GalleriaPage() {
       ? Math.floor(Number(notaForm.cantidad) / Number(notaForm.ratio))
       : null
 
-  const detailFields = detail
+  const detailFields: DetailField[] = detail
     ? detail.tipo === 'produccion'
       ? [
           { label: 'ID', value: detail.data.id },
@@ -535,7 +588,7 @@ export default function GalleriaPage() {
                       ? <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--vs-text-muted)' }}>
                           Sin registros aún
                         </td></tr>
-                      : prodPag.slice.map((r, index) => (
+                      : prodPag.slice.map((r: any, index: number) => (
                           <tr key={r.id}>
                             <td style={{ color: 'var(--vs-text-muted)', fontSize: '.78rem' }}>
                               {(prodPag.page - 1) * PAGE_SIZE + index + 1}
@@ -611,7 +664,7 @@ export default function GalleriaPage() {
                 ? <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--vs-text-muted)' }}>
                     Sin notas de salida aún
                   </td></tr>
-                : notasPag.slice.map((n, index) => (
+                : notasPag.slice.map((n: any, index: number) => (
                     <tr key={n.id}>
                       <td style={{ color: 'var(--vs-text-muted)', fontSize: '.78rem' }}>
                         {(notasPag.page - 1) * PAGE_SIZE + index + 1}
@@ -711,7 +764,7 @@ export default function GalleriaPage() {
                     onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}
                   >
                     <option value="">— Seleccionar unidad —</option>
-                    {unidades.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                    {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
                   </select>
                 </div>
               </div>
