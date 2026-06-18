@@ -59,6 +59,31 @@ export const getUnidadesGalleria = () =>
 export const getUnidadesMoscas = () =>
   api.get("/configuracion/unidades/moscas").then((r) => r.data);
 
+// ── Lugares: CRUD completo (admin) ────────────────────────────────────────────
+export const getLugaresAvispitasTodos = () =>
+  api.get("/configuracion/lugares/avispitas/todos").then((r) => r.data);
+export const createLugarAvispitas = (data: { nombre: string; descripcion?: string }) =>
+  api.post("/configuracion/lugares/avispitas", data).then((r) => r.data);
+export const updateLugarAvispitas = (
+  id: number,
+  data: Partial<{ nombre: string; descripcion: string; activo: boolean }>
+) =>
+  api.put(`/configuracion/lugares/avispitas/${id}`, data).then((r) => r.data);
+export const deleteLugarAvispitas = (id: number) =>
+  api.delete(`/configuracion/lugares/avispitas/${id}`).then((r) => r.data);
+
+export const getLugaresMoscasTodos = () =>
+  api.get("/configuracion/lugares/moscas/todos").then((r) => r.data);
+export const createLugarMoscas = (data: { nombre: string; descripcion?: string }) =>
+  api.post("/configuracion/lugares/moscas", data).then((r) => r.data);
+export const updateLugarMoscas = (
+  id: number,
+  data: Partial<{ nombre: string; descripcion: string; activo: boolean }>
+) =>
+  api.put(`/configuracion/lugares/moscas/${id}`, data).then((r) => r.data);
+export const deleteLugarMoscas = (id: number) =>
+  api.delete(`/configuracion/lugares/moscas/${id}`).then((r) => r.data);
+
 // ── Predicción ────────────────────────────────────────────────────────────────
 export const getPrediccion = (especie: string, dias: number) =>
   api.get(`/prediccion/${especie}`, { params: { dias } }).then((r) => r.data);
