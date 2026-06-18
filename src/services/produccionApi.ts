@@ -107,3 +107,14 @@ export const entrenarModelo = (especie?: string) =>
   api.post("/internal/entrenar/manual", null, {
     params: especie ? { especie } : undefined,
   }).then((r) => r.data);
+
+
+  // ── Proyección ────────────────────────────────────────────────────────────────
+export const getProyeccionParametros = () =>
+  api.get("/proyeccion/parametros").then((r) => r.data);
+
+export const calcularProyeccion = (data: {
+  especie_destino: string;
+  cantidad_objetivo: number;
+  fecha_objetivo: string; // "YYYY-MM-DD"
+}) => api.post("/proyeccion/calcular", data).then((r) => r.data);
