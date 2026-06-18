@@ -2,11 +2,10 @@
 import { useState } from 'react'
 import { useSettingsStore } from '@/store/settingsStore'
 import { t } from '@/i18n'
-
-const LUGARES = [
-  'San Ricardo A', 'San Ricardo B', 'Quemazón', 'Trapiche',
-  'Segundo Jirón', 'Pabellón alto', 'Sacachique', 'La Encantada',
-]
+import {
+  useLugaresAvispitasTodos, useCreateLugarAvispitas, useUpdateLugarAvispitas, useDeleteLugarAvispitas,
+  useLugaresMoscasTodos, useCreateLugarMoscas, useUpdateLugarMoscas, useDeleteLugarMoscas,
+} from '@/hooks/useProduccion'
 
 /* ─── Section wrapper ─────────────────────────────────────────────────────── */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -75,6 +74,99 @@ function ToggleGroup<T extends string>({
   )
 }
 
+/* ─── Lugares editor (reutilizable para avispitas y moscas) ─────────────────── */
+type Lugar = { id: number; nombre: string; descripcion?: string | null; activo: boolean }
+
+function LugaresEditor({
+  lugares, onCrear, onActualizar, onEliminar,
+}: {
+  lugares: Lugar[]
+  onCrear: (nombre: string) => void
+  onActualizar: (id: number, data: { nombre?: string; activo?: boolean }) => void
+  onEliminar: (id: number) => void
+}) {
+  const [nuevo, setNuevo] = useState('')
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editNombre, setEditNombre] = useState('')
+
+  const guardarEdicion = () => {
+    if (editId == null) return
+    const nombre = editNombre.trim()
+    if (nombre) onActualizar(editId, { nombre })
+    setEditId(null)
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        {lugares.map(l => (
+          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {editId === l.id ? (
+              <input
+                className="cfg-input"
+                style={{ width: 140, padding: '4px 8px' }}
+                value={editNombre}
+                onChange={e => setEditNombre(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') guardarEdicion() }}
+                onBlur={guardarEdicion}
+                autoFocus
+              />
+            ) : (
+              <span
+                className="lugar-chip"
+                style={{
+                  opacity: l.activo ? 1 : .5,
+                  textDecoration: l.activo ? 'none' : 'line-through',
+                  cursor: 'pointer',
+                }}
+                onClick={() => { setEditId(l.id); setEditNombre(l.nombre) }}
+                title="Click para editar nombre"
+              >
+                {l.nombre}
+              </span>
+            )}
+            <button
+              className="cfg-btn cfg-btn--ghost"
+              style={{ padding: '2px 8px', fontSize: '.72rem' }}
+              onClick={() => onActualizar(l.id, { activo: !l.activo })}
+            >
+              {l.activo ? 'Desactivar' : 'Activar'}
+            </button>
+            <button
+              className="cfg-btn cfg-btn--ghost"
+              style={{ padding: '2px 8px', fontSize: '.72rem', color: '#dc2626' }}
+              onClick={() => { if (confirm(`¿Eliminar "${l.nombre}"?`)) onEliminar(l.id) }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        {lugares.length === 0 && (
+          <span style={{ fontSize: '.82rem', color: 'var(--vs-text-muted)' }}>Sin lugares registrados.</span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          className="cfg-input"
+          style={{ maxWidth: 220 }}
+          placeholder="Nuevo lugar..."
+          value={nuevo}
+          onChange={e => setNuevo(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && nuevo.trim()) { onCrear(nuevo.trim()); setNuevo('') }
+          }}
+        />
+        <button
+          className="cfg-btn cfg-btn--primary"
+          onClick={() => { if (nuevo.trim()) { onCrear(nuevo.trim()); setNuevo('') } }}
+        >
+          Agregar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Main ────────────────────────────────────────────────────────────────── */
 export default function ConfiguracionPage() {
   const store = useSettingsStore()
@@ -87,6 +179,18 @@ export default function ConfiguracionPage() {
     version: store.version,
     sistema: store.sistema,
   })
+
+  // ── Lugares de liberación: Avispitas ──
+  const { data: lugaresAvispitas = [] } = useLugaresAvispitasTodos()
+  const crearAvispitas = useCreateLugarAvispitas()
+  const actualizarAvispitas = useUpdateLugarAvispitas()
+  const eliminarAvispitas = useDeleteLugarAvispitas()
+
+  // ── Lugares de liberación: Moscas ──
+  const { data: lugaresMoscas = [] } = useLugaresMoscasTodos()
+  const crearMoscas = useCreateLugarMoscas()
+  const actualizarMoscas = useUpdateLugarMoscas()
+  const eliminarMoscas = useDeleteLugarMoscas()
 
   const handleGuardar = () => {
     store.setEmpresa(draft.empresa)
@@ -294,16 +398,24 @@ export default function ConfiguracionPage() {
         </div>
       </div>
 
-      {/* ── Lugares de liberación ── */}
-      <Section title={i.lugares}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {LUGARES.map(l => (
-            <span key={l} className="lugar-chip">{l}</span>
-          ))}
-        </div>
-        <p style={{ margin: '14px 0 0', fontSize: '.76rem', color: 'var(--vs-text-muted)' }}>
-          {LUGARES.length} lugares registrados. Para agregar o eliminar lugares, contacte al administrador del sistema.
-        </p>
+      {/* ── Lugares de liberación: Avispitas ── */}
+      <Section title="Lugares de liberación — Avispitas">
+        <LugaresEditor
+          lugares={lugaresAvispitas}
+          onCrear={nombre => crearAvispitas.mutate({ nombre })}
+          onActualizar={(id, data) => actualizarAvispitas.mutate({ id, data })}
+          onEliminar={id => eliminarAvispitas.mutate(id)}
+        />
+      </Section>
+
+      {/* ── Lugares de liberación: Moscas ── */}
+      <Section title="Lugares de liberación — Moscas">
+        <LugaresEditor
+          lugares={lugaresMoscas}
+          onCrear={nombre => crearMoscas.mutate({ nombre })}
+          onActualizar={(id, data) => actualizarMoscas.mutate({ id, data })}
+          onEliminar={id => eliminarMoscas.mutate(id)}
+        />
       </Section>
     </>
   )
