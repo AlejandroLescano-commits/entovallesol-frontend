@@ -377,3 +377,17 @@ export const useDeleteLugarMoscas = () => {
     onError: errEliminar,
   });
 };
+
+
+
+import { getProyeccionParametros, calcularProyeccion } from "@/services/produccionApi";
+
+export const useProyeccionParametros = () =>
+  useQuery({ queryKey: ["proyeccion_parametros"], queryFn: getProyeccionParametros });
+
+export const useCalcularProyeccion = () => {
+  return useMutation({
+    mutationFn: calcularProyeccion,
+    onError: () => toast.error("Error al calcular proyección"),
+  });
+};
