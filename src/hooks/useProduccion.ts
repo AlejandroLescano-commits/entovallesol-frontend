@@ -14,6 +14,8 @@ import {
   getUnidadesSitodroga, getUnidadesAvispas,
   getUnidadesGalleria, getUnidadesMoscas,
   getPrediccion, getPrediccionTodas,
+  getLugaresAvispitasTodos, createLugarAvispitas, updateLugarAvispitas, deleteLugarAvispitas,
+  getLugaresMoscasTodos, createLugarMoscas, updateLugarMoscas, deleteLugarMoscas,
 } from "@/services/produccionApi";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -26,6 +28,14 @@ const okAnular = (qc: ReturnType<typeof useQueryClient>, ...keys: string[]) => (
   keys.forEach(k => qc.invalidateQueries({ queryKey: [k] }));
   toast.success("Registro anulado");
 };
+
+const okEliminar = (qc: ReturnType<typeof useQueryClient>, ...keys: string[]) => () => {
+  keys.forEach(k => qc.invalidateQueries({ queryKey: [k] }));
+  toast.success("Registro eliminado permanentemente");
+};
+
+const errEliminar = (err: any) =>
+  toast.error(err?.response?.data?.detail ?? "Error al eliminar");
 
 // ── Producción Sitotroga ──────────────────────────────────────────────────────
 export const useSitotroga = (p?: { fecha_inicio?: string; fecha_fin?: string }) =>
@@ -205,22 +215,17 @@ export const useAnularNotaGalleria = () => {
   });
 };
 
-// ── Lugares y Unidades ────────────────────────────────────────────────────────
+// ── Lugares y Unidades (solo lectura, listas activas) ────────────────────────
 export const useLugaresAvispitas = () =>
   useQuery({ queryKey: ["lugares_avispitas"], queryFn: getLugaresAvispitas });
-
 export const useLugaresMoscas = () =>
   useQuery({ queryKey: ["lugares_moscas"], queryFn: getLugaresMoscas });
-
 export const useUnidadesSitodroga = () =>
   useQuery({ queryKey: ["unidades_sitodroga"], queryFn: getUnidadesSitodroga });
-
 export const useUnidadesAvispas = () =>
   useQuery({ queryKey: ["unidades_avispas"], queryFn: getUnidadesAvispas });
-
 export const useUnidadesGalleria = () =>
   useQuery({ queryKey: ["unidades_galleria"], queryFn: getUnidadesGalleria });
-
 export const useUnidadesMoscas = () =>
   useQuery({ queryKey: ["unidades_moscas"], queryFn: getUnidadesMoscas });
 
@@ -238,14 +243,7 @@ export const usePrediccionTodas = (dias: number) =>
     queryFn: () => getPrediccionTodas(dias),
   });
 
-const okEliminar = (qc: ReturnType<typeof useQueryClient>, ...keys: string[]) => () => {
-  keys.forEach(k => qc.invalidateQueries({ queryKey: [k] }));
-  toast.success("Registro eliminado permanentemente");
-};
-
-const errEliminar = (err: any) =>
-  toast.error(err?.response?.data?.detail ?? "Error al eliminar");
-
+// ── Eliminación física ─────────────────────────────────────────────────────
 export const useEliminarSitotroga = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -314,6 +312,68 @@ export const useEliminarNotaGalleria = () => {
   return useMutation({
     mutationFn: (id: number) => api.delete(`/produccion/notas/galleria/${id}/eliminar`).then(r => r.data),
     onSuccess: okEliminar(qc, "notas_galleria", "paratheresia"),
+    onError: errEliminar,
+  });
+};
+
+// ── Lugares Avispitas: CRUD completo (incluye inactivos) ──────────────────────
+export const useLugaresAvispitasTodos = () =>
+  useQuery({ queryKey: ["lugares_avispitas_todos"], queryFn: getLugaresAvispitasTodos });
+
+export const useCreateLugarAvispitas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createLugarAvispitas,
+    onSuccess: ok(qc, "lugares_avispitas_todos", "lugares_avispitas"),
+    onError: () => toast.error("Error al guardar"),
+  });
+};
+
+export const useUpdateLugarAvispitas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => updateLugarAvispitas(id, data),
+    onSuccess: ok(qc, "lugares_avispitas_todos", "lugares_avispitas"),
+    onError: () => toast.error("Error al actualizar"),
+  });
+};
+
+export const useDeleteLugarAvispitas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteLugarAvispitas,
+    onSuccess: okEliminar(qc, "lugares_avispitas_todos", "lugares_avispitas"),
+    onError: errEliminar,
+  });
+};
+
+// ── Lugares Moscas: CRUD completo (incluye inactivos) ─────────────────────────
+export const useLugaresMoscasTodos = () =>
+  useQuery({ queryKey: ["lugares_moscas_todos"], queryFn: getLugaresMoscasTodos });
+
+export const useCreateLugarMoscas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createLugarMoscas,
+    onSuccess: ok(qc, "lugares_moscas_todos", "lugares_moscas"),
+    onError: () => toast.error("Error al guardar"),
+  });
+};
+
+export const useUpdateLugarMoscas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => updateLugarMoscas(id, data),
+    onSuccess: ok(qc, "lugares_moscas_todos", "lugares_moscas"),
+    onError: () => toast.error("Error al actualizar"),
+  });
+};
+
+export const useDeleteLugarMoscas = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteLugarMoscas,
+    onSuccess: okEliminar(qc, "lugares_moscas_todos", "lugares_moscas"),
     onError: errEliminar,
   });
 };
