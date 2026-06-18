@@ -8,116 +8,206 @@ import toast from 'react-hot-toast'
 
 const PAGE_SIZE = 15
 
-function usePagination<T>(data: T[]) {
+function usePagination(data) {
   const [page, setPage] = useState(1)
   const total = Math.ceil(data.length / PAGE_SIZE) || 1
   const slice = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   return { slice, page, total, setPage }
 }
 
-function Pagination({ page, total, setPage }: { page: number; total: number; setPage: (p: number) => void }) {
+// ── Paginación ────────────────────────────────────────────────────────────────
+function Pagination({ page, total, setPage }) {
   if (total <= 1) return null
+  const pages = Array.from({ length: total }, (_, i) => i + 1)
+    .filter(p => p === 1 || p === total || Math.abs(p - page) <= 1)
+    .reduce((acc, p, i, arr) => {
+      if (i > 0 && p - arr[i - 1] > 1) acc.push('...')
+      acc.push(p)
+      return acc
+    }, [])
+
   return (
-    <div className="d-flex align-items-center justify-content-between px-1 pt-3" style={{ borderTop: '1px solid #f3f4f6' }}>
-      <span style={{ fontSize: '.78rem', color: '#9ca3af' }}>Página {page} de {total}</span>
-      <div className="d-flex gap-1">
-        <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.75rem', padding: '2px 10px' }} disabled={page === 1} onClick={() => setPage(page - 1)}>← Ant</button>
-        {Array.from({ length: total }, (_, i) => i + 1)
-          .filter(p => p === 1 || p === total || Math.abs(p - page) <= 1)
-          .reduce<(number | '...')[]>((acc, p, i, arr) => {
-            if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...')
-            acc.push(p)
-            return acc
-          }, [])
-          .map((p, i) =>
-            p === '...'
-              ? <span key={`e${i}`} style={{ padding: '0 4px', fontSize: '.75rem', color: '#9ca3af' }}>…</span>
-              : <button key={p} className={`btn btn-sm ${page === p ? 'btn-success' : 'btn-outline-secondary'}`} style={{ fontSize: '.75rem', padding: '2px 8px', minWidth: 30 }} onClick={() => setPage(p as number)}>{p}</button>
-          )}
-        <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.75rem', padding: '2px 10px' }} disabled={page === total} onClick={() => setPage(page + 1)}>Sig →</button>
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '14px 20px 0', borderTop: '1px solid var(--vsp-border)',
+    }}>
+      <span style={{ fontSize: '.78rem', color: 'var(--vsp-text-muted)' }}>
+        Página {page} de {total}
+      </span>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button className="vsp-page-btn" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
+        {pages.map((p, i) =>
+          p === '...'
+            ? <span key={`e${i}`} style={{ padding: '0 6px', color: 'var(--vsp-text-muted)', lineHeight: '28px' }}>…</span>
+            : <button
+                key={p}
+                className={`vsp-page-btn ${page === p ? 'active' : ''}`}
+                onClick={() => setPage(p)}
+              >{p}</button>
+        )}
+        <button className="vsp-page-btn" disabled={page === total} onClick={() => setPage(page + 1)}>›</button>
       </div>
     </div>
   )
 }
 
-function ConfirmModal({ mensaje, accionLabel = 'Anular', onConfirm, onCancel }: { mensaje: string; accionLabel?: string; onConfirm: () => void; onCancel: () => void }) {
+// ── Modal de confirmación ─────────────────────────────────────────────────────
+function ConfirmModal({ mensaje, accionLabel = 'Anular', onConfirm, onCancel }) {
+  const isEliminar = accionLabel === 'Eliminar'
   return (
-    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }}>
-      <div className="modal-dialog modal-sm modal-dialog-centered">
-        <div className="modal-content">
-          <div className="modal-header border-0 pb-0">
-            <h6 className="modal-title fw-bold text-danger">⚠ Confirmar {accionLabel.toLowerCase()}</h6>
+    <div className="vsp-overlay">
+      <div className="vsp-dialog vsp-dialog--sm">
+        <div className="vsp-dialog__head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: isEliminar ? 'var(--vsp-danger-soft)' : 'var(--vsp-warn-soft)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+            }}>
+              {isEliminar ? '🗑' : '⚠️'}
+            </span>
+            <h6 style={{ margin: 0, fontWeight: 600, fontSize: '.92rem', color: isEliminar ? 'var(--vsp-danger)' : 'var(--vsp-warn)' }}>
+              Confirmar {accionLabel.toLowerCase()}
+            </h6>
           </div>
-          <div className="modal-body pt-2" style={{ fontSize: '.88rem' }}>{mensaje}</div>
-          <div className="modal-footer border-0 pt-0 gap-2">
-            <button className="btn btn-sm btn-secondary" onClick={onCancel}>Cancelar</button>
-            <button className="btn btn-sm btn-danger" onClick={onConfirm}>{accionLabel}</button>
-          </div>
+        </div>
+        <div className="vsp-dialog__body" style={{ fontSize: '.88rem', color: 'var(--vsp-text-secondary)', lineHeight: 1.55 }}>
+          {mensaje}
+        </div>
+        <div className="vsp-dialog__foot">
+          <button className="vsp-btn vsp-btn--ghost" onClick={onCancel}>Cancelar</button>
+          <button
+            className={`vsp-btn ${isEliminar ? 'vsp-btn--danger' : 'vsp-btn--warn'}`}
+            onClick={onConfirm}
+          >
+            {isEliminar ? '🗑 Eliminar' : '⚠ Anular'}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
-function DetailModal({ title, fields, onClose }: { title: string; fields: { label: string; value: any }[]; onClose: () => void }) {
+// ── Modal de detalle ──────────────────────────────────────────────────────────
+function DetailModal({ title, fields, onClose }) {
   return (
-    <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.45)' }} onClick={onClose}>
-      <div className="modal-dialog modal-dialog-centered" onClick={e => e.stopPropagation()}>
-        <div className="modal-content">
-          <div className="modal-header" style={{ borderBottom: '2px solid #e5e7eb' }}>
-            <h5 className="modal-title fw-bold" style={{ fontSize: '.95rem' }}>🔍 {title}</h5>
-            <button className="btn-close" onClick={onClose} />
+    <div className="vsp-overlay" onClick={onClose}>
+      <div className="vsp-dialog" onClick={e => e.stopPropagation()}>
+        <div className="vsp-dialog__head">
+          <h5 style={{ margin: 0, fontWeight: 600, fontSize: '.95rem' }}>{title}</h5>
+          <button className="vsp-icon-btn" onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        <div className="vsp-dialog__body">
+          <div className="vsp-detail-grid">
+            {fields.map(({ label, value }) => (
+              <div key={label} className="vsp-detail-row">
+                <span className="vsp-detail-label">{label}</span>
+                <span className="vsp-detail-value">
+                  {value != null && value !== ''
+                    ? value
+                    : <span style={{ color: 'var(--vsp-text-muted)' }}>—</span>}
+                </span>
+              </div>
+            ))}
           </div>
-          <div className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
-            <dl className="row mb-0" style={{ rowGap: '.4rem' }}>
-              {fields.map(({ label, value }) => (
-                <>
-                  <dt key={`dt-${label}`} className="col-sm-5 mb-0" style={{ fontSize: '.8rem', color: '#6b7280', fontWeight: 500 }}>{label}</dt>
-                  <dd key={`dd-${label}`} className="col-sm-7 mb-0" style={{ fontSize: '.88rem', color: value != null && value !== '' ? '#111827' : '#9ca3af' }}>
-                    {value != null && value !== '' ? value : '—'}
-                  </dd>
-                </>
-              ))}
-            </dl>
-          </div>
-          <div className="modal-footer" style={{ borderTop: '1px solid #f3f4f6' }}>
-            <button className="btn btn-secondary btn-sm" onClick={onClose}>Cerrar</button>
-          </div>
+        </div>
+        <div className="vsp-dialog__foot">
+          <button className="vsp-btn vsp-btn--ghost" onClick={onClose}>Cerrar</button>
         </div>
       </div>
     </div>
   )
 }
 
-const fmt = (v: string | null | undefined) =>
+// ── Tarjeta de métrica ────────────────────────────────────────────────────────
+function MetricCard({ icon, label, value, color = '#16a34a' }) {
+  return (
+    <div className="vsp-metric-card">
+      <div style={{
+        width: 38, height: 38, borderRadius: 10,
+        background: `${color}18`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 18, flexShrink: 0,
+      }}>{icon}</div>
+      <div>
+        <div style={{ fontSize: '.72rem', color: 'var(--vsp-text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+        <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--vsp-text-primary)', lineHeight: 1.2 }}>{value}</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Badge de estado ───────────────────────────────────────────────────────────
+function Badge({ activo }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 9px', borderRadius: 20, fontSize: '.72rem', fontWeight: 600,
+      background: activo ? 'var(--vsp-success-soft)' : 'var(--vsp-neutral-soft)',
+      color: activo ? 'var(--vsp-success)' : 'var(--vsp-text-muted)',
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+      {activo ? 'Activo' : 'Anulado'}
+    </span>
+  )
+}
+
+// ── Badge de tipo ─────────────────────────────────────────────────────────────
+const TIPO_COLORS = {
+  Parasitacion: { bg: '#ede9fe', color: '#6d28d9' },
+  Venta:        { bg: 'var(--vsp-success-soft)', color: 'var(--vsp-success)' },
+  Liberacion:   { bg: '#dbeafe', color: '#1d4ed8' },
+}
+function TipoBadge({ tipo }) {
+  const c = TIPO_COLORS[tipo] ?? { bg: 'var(--vsp-neutral-soft)', color: 'var(--vsp-text-muted)' }
+  return (
+    <span style={{
+      display: 'inline-block', padding: '2px 9px', borderRadius: 20,
+      fontSize: '.72rem', fontWeight: 600,
+      background: c.bg, color: c.color,
+    }}>{tipo}</span>
+  )
+}
+
+const fmt = v =>
   v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : null
 
-type Confirm = { id: number; tipo: 'produccion' | 'nota'; accion: 'anular' | 'eliminar'; mensaje: string }
+const NOTA_FORM_DEFAULT = {
+  fecha: '', tiposalida: 'Parasitacion',
+  id_lugarliberacion: '', descripcion: '',
+  id_unidad: '', cantidad: '',
+}
 
+// ── Componente principal ──────────────────────────────────────────────────────
 export default function ParathesiaPage() {
   const { data: registros = [], isLoading } = useParatheresia()
-  const { data: notas = [] } = useNotasMoscas()
+  const { data: notas = [] }    = useNotasMoscas()
   const { data: unidades = [] } = useUnidadesMoscas()
-  const { data: lugares = [] } = useLugaresMoscas()
-  const crear = useCreateParatheresia()
-  const crearNota = useCreateNotaMoscas()
-  const anular = useAnularParatheresia()
-  const anularNota = useAnularNotaMoscas()
-  const eliminar = useEliminarParatheresia()
+  const { data: lugares = [] }  = useLugaresMoscas()
+
+  const crear        = useCreateParatheresia()
+  const crearNota    = useCreateNotaMoscas()
+  const anular       = useAnularParatheresia()
+  const anularNota   = useAnularNotaMoscas()
+  const eliminar     = useEliminarParatheresia()
   const eliminarNota = useEliminarNotaMoscas()
 
-  const [tab, setTab] = useState<'produccion' | 'notas'>('produccion')
-  const [showModal, setShowModal] = useState(false)
+  const [tab, setTab]                   = useState('produccion')
+  const [showModal, setShowModal]       = useState(false)
   const [showNotaModal, setShowNotaModal] = useState(false)
-  const [confirm, setConfirm] = useState<Confirm | null>(null)
-  const [detail, setDetail] = useState<{ data: any; tipo: 'produccion' | 'nota' } | null>(null)
-  const [form, setForm] = useState({ fecha: '', id_unidad: '', cantidad: '' })
-  const [notaForm, setNotaForm] = useState({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' })
+  const [confirm, setConfirm]           = useState(null)
+  const [detail, setDetail]             = useState(null)
+  const [form, setForm]                 = useState({ fecha: '', id_unidad: '', cantidad: '' })
+  const [notaForm, setNotaForm]         = useState(NOTA_FORM_DEFAULT)
 
   const prodPag  = usePagination(registros)
   const notasPag = usePagination(notas)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const totalActivos  = registros.filter(r => r.activo).length
+  const totalAnulados = registros.filter(r => !r.activo).length
+  const notasActivas  = notas.filter(n => n.activo).length
+
+  const handleSubmit = e => {
     e.preventDefault()
     if (!form.fecha || !form.cantidad) return toast.error('Completa los campos requeridos')
     crear.mutate(
@@ -126,13 +216,19 @@ export default function ParathesiaPage() {
     )
   }
 
-  const handleNotaSubmit = (e: React.FormEvent) => {
+  const handleNotaSubmit = e => {
     e.preventDefault()
-    crearNota.mutate({
-      ...notaForm, cantidad: Number(notaForm.cantidad),
-      id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
-      id_lugarliberacion: notaForm.id_lugarliberacion ? Number(notaForm.id_lugarliberacion) : null,
-    }, { onSuccess: () => { setShowNotaModal(false); setNotaForm({ fecha: '', tiposalida: 'Parasitacion', id_lugarliberacion: '', descripcion: '', id_unidad: '', cantidad: '' }) } })
+    crearNota.mutate(
+      {
+        ...notaForm,
+        cantidad: Number(notaForm.cantidad),
+        id_unidad: notaForm.id_unidad ? Number(notaForm.id_unidad) : null,
+        id_lugarliberacion: notaForm.tiposalida === 'Liberacion' && notaForm.id_lugarliberacion
+          ? Number(notaForm.id_lugarliberacion)
+          : null,
+      },
+      { onSuccess: () => { setShowNotaModal(false); setNotaForm(NOTA_FORM_DEFAULT) } }
+    )
   }
 
   const ejecutarAccion = () => {
@@ -152,7 +248,7 @@ export default function ParathesiaPage() {
           { label: 'Fecha', value: detail.data.fecha },
           { label: 'Cantidad (parejas)', value: detail.data.cantidad },
           { label: 'Unidad', value: detail.data.id_unidad },
-          { label: 'Estado', value: detail.data.activo ? '✅ Activo' : '❌ Anulado' },
+          { label: 'Estado', value: <Badge activo={detail.data.activo} /> },
           { label: 'Registrado por', value: detail.data.registrado_por },
           { label: 'Creado en', value: fmt(detail.data.creado_en) },
           { label: 'Anulado por', value: detail.data.anulado_por },
@@ -161,11 +257,11 @@ export default function ParathesiaPage() {
       : [
           { label: 'ID', value: detail.data.id },
           { label: 'Fecha', value: detail.data.fecha },
-          { label: 'Tipo de salida', value: detail.data.tiposalida },
-          { label: 'Lugar liberación', value: lugares.find((l: any) => l.id === detail.data.id_lugarliberacion)?.nombre },
+          { label: 'Tipo de salida', value: <TipoBadge tipo={detail.data.tiposalida} /> },
+          { label: 'Lugar liberación', value: lugares.find(l => l.id === detail.data.id_lugarliberacion)?.nombre },
           { label: 'Cantidad (parejas)', value: detail.data.cantidad },
           { label: 'Descripción', value: detail.data.descripcion },
-          { label: 'Estado', value: detail.data.activo ? '✅ Activo' : '❌ Anulado' },
+          { label: 'Estado', value: <Badge activo={detail.data.activo} /> },
           { label: 'Registrado por', value: detail.data.registrado_por },
           { label: 'Creado en', value: fmt(detail.data.creado_en) },
           { label: 'Anulado por', value: detail.data.anulado_por },
@@ -174,7 +270,194 @@ export default function ParathesiaPage() {
     : []
 
   return (
-    <div>
+    <>
+      {/* ── CSS local ── */}
+      <style>{`
+        :root {
+          --vsp-primary:       #16a34a;
+          --vsp-primary-soft:  #dcfce7;
+          --vsp-success:       #15803d;
+          --vsp-success-soft:  #dcfce7;
+          --vsp-danger:        #dc2626;
+          --vsp-danger-soft:   #fee2e2;
+          --vsp-warn:          #d97706;
+          --vsp-warn-soft:     #fef3c7;
+          --vsp-neutral-soft:  #f3f4f6;
+          --vsp-border:        #e5e7eb;
+          --vsp-text-primary:  #111827;
+          --vsp-text-secondary:#374151;
+          --vsp-text-muted:    #9ca3af;
+          --vsp-bg-card:       #ffffff;
+          --vsp-bg-page:       #f9fafb;
+        }
+
+        .vsp-overlay {
+          position: fixed; inset: 0; z-index: 1050;
+          background: rgba(0,0,0,.45);
+          display: flex; align-items: center; justify-content: center;
+          padding: 1rem;
+        }
+
+        .vsp-dialog {
+          background: var(--vsp-bg-card);
+          border-radius: 14px;
+          width: 100%; max-width: 480px;
+          box-shadow: 0 20px 40px rgba(0,0,0,.18);
+          overflow: hidden;
+        }
+        .vsp-dialog--sm { max-width: 360px; }
+        .vsp-dialog__head {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px 20px; border-bottom: 1px solid var(--vsp-border);
+        }
+        .vsp-dialog__body { padding: 20px; }
+        .vsp-dialog__foot {
+          display: flex; justify-content: flex-end; gap: 8px;
+          padding: 14px 20px; border-top: 1px solid var(--vsp-border);
+          background: #fafafa;
+        }
+
+        .vsp-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 7px 16px; border-radius: 8px; font-size: .85rem;
+          font-weight: 500; border: none; cursor: pointer;
+          transition: opacity .15s, transform .1s;
+        }
+        .vsp-btn:active { transform: scale(.97); }
+        .vsp-btn--primary { background: var(--vsp-primary); color: #fff; }
+        .vsp-btn--primary:hover { opacity: .88; }
+        .vsp-btn--ghost { background: transparent; border: 1px solid var(--vsp-border); color: var(--vsp-text-secondary); }
+        .vsp-btn--ghost:hover { background: var(--vsp-neutral-soft); }
+        .vsp-btn--danger { background: var(--vsp-danger); color: #fff; }
+        .vsp-btn--danger:hover { opacity: .88; }
+        .vsp-btn--warn { background: var(--vsp-warn); color: #fff; }
+        .vsp-btn--warn:hover { opacity: .88; }
+        .vsp-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+        .vsp-icon-btn {
+          background: none; border: none; cursor: pointer;
+          color: var(--vsp-text-muted); font-size: 1rem;
+          padding: 2px 6px; border-radius: 4px; line-height: 1;
+        }
+        .vsp-icon-btn:hover { color: var(--vsp-text-primary); background: var(--vsp-neutral-soft); }
+
+        .vsp-card {
+          background: var(--vsp-bg-card);
+          border: 1px solid var(--vsp-border);
+          border-radius: 12px; overflow: hidden;
+        }
+        .vsp-metric-card {
+          background: var(--vsp-bg-card);
+          border: 1px solid var(--vsp-border);
+          border-radius: 10px; padding: 14px 16px;
+          display: flex; align-items: center; gap: 12px;
+        }
+
+        .vsp-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+        .vsp-table thead th {
+          padding: 10px 14px;
+          background: var(--vsp-bg-page);
+          font-size: .72rem; font-weight: 600;
+          text-transform: uppercase; letter-spacing: .05em;
+          color: var(--vsp-text-muted);
+          border-bottom: 1px solid var(--vsp-border);
+          white-space: nowrap;
+        }
+        .vsp-table tbody tr { border-bottom: 1px solid var(--vsp-border); transition: background .1s; }
+        .vsp-table tbody tr:last-child { border-bottom: none; }
+        .vsp-table tbody tr:hover { background: #f9fafb; }
+        .vsp-table td { padding: 10px 14px; color: var(--vsp-text-secondary); vertical-align: middle; }
+
+        .vsp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--vsp-border); margin-bottom: 20px; }
+        .vsp-tab {
+          padding: 9px 18px; font-size: .88rem; font-weight: 500;
+          border: none; background: none; cursor: pointer;
+          color: var(--vsp-text-muted); border-bottom: 2px solid transparent;
+          margin-bottom: -1px; transition: color .15s;
+          display: flex; align-items: center; gap: 8px;
+        }
+        .vsp-tab:hover { color: var(--vsp-text-secondary); }
+        .vsp-tab.active { color: var(--vsp-primary); border-color: var(--vsp-primary); font-weight: 600; }
+        .vsp-tab-badge {
+          background: var(--vsp-neutral-soft); color: var(--vsp-text-muted);
+          font-size: .65rem; font-weight: 700; padding: 1px 7px; border-radius: 10px;
+        }
+        .vsp-tab.active .vsp-tab-badge { background: var(--vsp-primary-soft); color: var(--vsp-primary); }
+
+        .vsp-page-btn {
+          width: 30px; height: 30px; border-radius: 6px;
+          border: 1px solid var(--vsp-border); background: var(--vsp-bg-card);
+          font-size: .82rem; cursor: pointer; color: var(--vsp-text-secondary);
+          transition: all .12s;
+        }
+        .vsp-page-btn:hover:not(:disabled) { background: var(--vsp-neutral-soft); }
+        .vsp-page-btn.active { background: var(--vsp-primary); border-color: var(--vsp-primary); color: #fff; font-weight: 600; }
+        .vsp-page-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+        .vsp-form-label {
+          display: block; font-size: .8rem; font-weight: 600;
+          color: var(--vsp-text-secondary); margin-bottom: 5px;
+        }
+        .vsp-input {
+          width: 100%; padding: 8px 12px; font-size: .88rem;
+          border: 1px solid var(--vsp-border); border-radius: 8px;
+          background: #fff; color: var(--vsp-text-primary);
+          transition: border-color .15s;
+          box-sizing: border-box;
+        }
+        .vsp-input:focus { outline: none; border-color: var(--vsp-primary); box-shadow: 0 0 0 3px rgba(22,163,74,.1); }
+
+        .vsp-action-btn {
+          padding: 4px 10px; border-radius: 6px; font-size: .75rem;
+          font-weight: 500; border: 1px solid; cursor: pointer; transition: all .12s;
+          display: inline-flex; align-items: center; gap: 4px;
+        }
+        .vsp-action-btn:active { transform: scale(.96); }
+        .vsp-action-btn--view {
+          border-color: var(--vsp-border); background: transparent; color: var(--vsp-text-muted);
+        }
+        .vsp-action-btn--view:hover { border-color: var(--vsp-text-secondary); color: var(--vsp-text-secondary); }
+        .vsp-action-btn--anular {
+          border-color: #fca5a5; background: transparent; color: var(--vsp-danger);
+        }
+        .vsp-action-btn--anular:hover { background: var(--vsp-danger-soft); }
+        .vsp-action-btn--delete {
+          border-color: var(--vsp-danger); background: var(--vsp-danger); color: #fff;
+        }
+        .vsp-action-btn--delete:hover { opacity: .85; }
+
+        .vsp-detail-grid { display: flex; flex-direction: column; }
+        .vsp-detail-row {
+          display: flex; align-items: center; gap: 12px;
+          padding: 8px 0; border-bottom: 1px solid var(--vsp-border);
+        }
+        .vsp-detail-row:last-child { border-bottom: none; }
+        .vsp-detail-label { flex: 0 0 140px; font-size: .78rem; font-weight: 600; color: var(--vsp-text-muted); }
+        .vsp-detail-value { font-size: .85rem; color: var(--vsp-text-primary); }
+
+        .vsp-spinner { display: flex; justify-content: center; padding: 48px 0; }
+        .vsp-modal-body {
+          padding: 20px; display: flex; flex-direction: column;
+          gap: 16px; max-height: 65vh; overflow-y: auto;
+        }
+
+        /* Animación suave entrada del campo lugar */
+        .vsp-field-slide {
+          animation: slideDown .2s ease;
+        }
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Hint de tipo de salida */
+        .vsp-tipo-hint {
+          margin-top: 6px; padding: 8px 12px;
+          border-radius: 8px; font-size: .78rem; line-height: 1.45;
+        }
+      `}</style>
+
+      {/* ── Modales globales ── */}
       {confirm && (
         <ConfirmModal
           mensaje={confirm.mensaje}
@@ -185,164 +468,368 @@ export default function ParathesiaPage() {
       )}
       {detail && (
         <DetailModal
-          title={detail.tipo === 'produccion' ? 'Detalle — Producción Paratheresia' : 'Detalle — Nota de Salida Paratheresia'}
+          title={detail.tipo === 'produccion' ? '🔍 Detalle — Producción Paratheresia' : '🔍 Detalle — Nota de Salida'}
           fields={detailFields}
           onClose={() => setDetail(null)}
         />
       )}
 
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      {/* ── Encabezado ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <h1 className="vs-page-title mb-0">Paratheresia claripalpis</h1>
-          <p className="text-muted mb-0" style={{ fontSize: '.85rem' }}>Moscas — unidad: parejas</p>
+          <h1 style={{ margin: 0, fontWeight: 700, fontSize: '1.4rem', color: 'var(--vsp-text-primary)' }}>
+            🦟 Paratheresia claripalpis
+          </h1>
+          <p style={{ margin: '3px 0 0', fontSize: '.83rem', color: 'var(--vsp-text-muted)' }}>
+            Moscas parasitoide — unidad: parejas
+          </p>
         </div>
-        <div className="d-flex gap-2">
-          <button className="btn-vs btn" onClick={() => setShowNotaModal(true)}>+ Nota Salida</button>
-          <button className="btn-vs btn" onClick={() => setShowModal(true)}>+ Producción</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="vsp-btn vsp-btn--ghost" onClick={() => setShowNotaModal(true)}>
+            ↗ Nota de Salida
+          </button>
+          <button className="vsp-btn vsp-btn--primary" onClick={() => setShowModal(true)}>
+            + Registrar Producción
+          </button>
         </div>
       </div>
 
-      <ul className="nav nav-tabs mb-3">
-        <li className="nav-item">
-          <button className={`nav-link ${tab === 'produccion' ? 'active' : ''}`} onClick={() => { setTab('produccion'); prodPag.setPage(1) }}>
-            Producción <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{registros.length}</span>
-          </button>
-        </li>
-        <li className="nav-item">
-          <button className={`nav-link ${tab === 'notas' ? 'active' : ''}`} onClick={() => { setTab('notas'); notasPag.setPage(1) }}>
-            Notas de Salida <span className="badge bg-secondary ms-2" style={{ fontSize: '.7rem' }}>{notas.length}</span>
-          </button>
-        </li>
-      </ul>
+      {/* ── Métricas ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
+        <MetricCard icon="🦟" label="Total registros"  value={registros.length} color="#16a34a" />
+        <MetricCard icon="✅" label="Activos"           value={totalActivos}     color="#15803d" />
+        <MetricCard icon="❌" label="Anulados"          value={totalAnulados}    color="#dc2626" />
+        <MetricCard icon="📋" label="Notas activas"     value={notasActivas}     color="#d97706" />
+      </div>
 
+      {/* ── Tabs ── */}
+      <div className="vsp-tabs">
+        <button
+          className={`vsp-tab ${tab === 'produccion' ? 'active' : ''}`}
+          onClick={() => { setTab('produccion'); prodPag.setPage(1) }}
+        >
+          🦟 Producción
+          <span className="vsp-tab-badge">{registros.length}</span>
+        </button>
+        <button
+          className={`vsp-tab ${tab === 'notas' ? 'active' : ''}`}
+          onClick={() => { setTab('notas'); notasPag.setPage(1) }}
+        >
+          📋 Notas de Salida
+          <span className="vsp-tab-badge">{notas.length}</span>
+        </button>
+      </div>
+
+      {/* ── Tab: Producción ── */}
       {tab === 'produccion' && (
-        <div className="vs-card">
+        <div className="vsp-card">
           {isLoading
-            ? <div className="vs-spinner"><div className="spinner-border text-success" /></div>
+            ? <div className="vsp-spinner"><div className="spinner-border text-success" /></div>
             : <>
-                <table className="table vs-table mb-0">
+                <table className="vsp-table">
                   <thead>
                     <tr>
-                      <th style={{ width: 48 }}>#</th><th>Fecha</th><th>Cantidad (parejas)</th><th>Activo</th>
-                      <th style={{ width: 110 }}></th>
+                      <th style={{ width: 44 }}>#</th>
+                      <th>Fecha</th>
+                      <th>Cantidad (parejas)</th>
+                      <th>Estado</th>
+                      <th style={{ width: 150, textAlign: 'right', paddingRight: 16 }}>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {prodPag.slice.length === 0
-                      ? <tr><td colSpan={5} className="text-center text-muted py-4">Sin registros</td></tr>
-                      : prodPag.slice.map((r: any, index: number) => (
+                      ? <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--vsp-text-muted)' }}>
+                          Sin registros aún
+                        </td></tr>
+                      : prodPag.slice.map((r, index) => (
                           <tr key={r.id}>
-                            <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(prodPag.page - 1) * PAGE_SIZE + index + 1}</td>
-                            <td>{r.fecha}</td><td>{r.cantidad}</td>
-                            <td><span className={`badge ${r.activo ? 'bg-success' : 'bg-secondary'}`}>{r.activo ? 'Sí' : 'No'}</span></td>
-                            <td className="d-flex gap-1">
-                              <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: r, tipo: 'produccion' })}>👁</button>
-                              {r.activo ? (
-                                <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anular.isPending}
-                                  onClick={() => setConfirm({ id: r.id, tipo: 'produccion', accion: 'anular', mensaje: 'Se anulará este registro de producción de Paratheresia.' })}>Anular</button>
-                              ) : (
-                                <button className="btn btn-sm btn-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={eliminar.isPending} title="Eliminar permanentemente"
-                                  onClick={() => setConfirm({ id: r.id, tipo: 'produccion', accion: 'eliminar', mensaje: 'Esto borrará el registro de forma permanente. No se puede deshacer.' })}>🗑</button>
-                              )}
+                            <td style={{ color: 'var(--vsp-text-muted)', fontSize: '.78rem' }}>
+                              {(prodPag.page - 1) * PAGE_SIZE + index + 1}
+                            </td>
+                            <td style={{ fontWeight: 500, color: 'var(--vsp-text-primary)' }}>{r.fecha}</td>
+                            <td>{r.cantidad.toLocaleString('es-PE')}</td>
+                            <td><Badge activo={r.activo} /></td>
+                            <td style={{ textAlign: 'right' }}>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+                                <button
+                                  className="vsp-action-btn vsp-action-btn--view"
+                                  onClick={() => setDetail({ data: r, tipo: 'produccion' })}
+                                  title="Ver detalle"
+                                >👁 Ver</button>
+                                {r.activo ? (
+                                  <button
+                                    className="vsp-action-btn vsp-action-btn--anular"
+                                    disabled={anular.isPending}
+                                    onClick={() => setConfirm({
+                                      id: r.id, tipo: 'produccion', accion: 'anular',
+                                      mensaje: 'Se anulará este registro de producción de Paratheresia. Podrás eliminarlo permanentemente después.',
+                                    })}
+                                  >Anular</button>
+                                ) : (
+                                  <button
+                                    className="vsp-action-btn vsp-action-btn--delete"
+                                    disabled={eliminar.isPending}
+                                    onClick={() => setConfirm({
+                                      id: r.id, tipo: 'produccion', accion: 'eliminar',
+                                      mensaje: 'Esto borrará el registro de forma permanente. No se puede deshacer.',
+                                    })}
+                                  >🗑 Eliminar</button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
                     }
                   </tbody>
                 </table>
-                <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
+                <div style={{ padding: '0 4px 4px' }}>
+                  <Pagination page={prodPag.page} total={prodPag.total} setPage={prodPag.setPage} />
+                </div>
               </>
           }
         </div>
       )}
 
+      {/* ── Tab: Notas de Salida ── */}
       {tab === 'notas' && (
-        <div className="vs-card">
-          <table className="table vs-table mb-0">
+        <div className="vsp-card">
+          <table className="vsp-table">
             <thead>
               <tr>
-                <th style={{ width: 48 }}>#</th><th>Fecha</th><th>Tipo</th><th>Lugar</th><th>Cantidad</th><th>Activo</th>
-                <th style={{ width: 110 }}></th>
+                <th style={{ width: 44 }}>#</th>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Lugar liberación</th>
+                <th>Cantidad</th>
+                <th>Estado</th>
+                <th style={{ width: 150, textAlign: 'right', paddingRight: 16 }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {notasPag.slice.length === 0
-                ? <tr><td colSpan={7} className="text-center text-muted py-4">Sin notas</td></tr>
-                : notasPag.slice.map((n: any, index: number) => (
+                ? <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--vsp-text-muted)' }}>
+                    Sin notas de salida aún
+                  </td></tr>
+                : notasPag.slice.map((n, index) => (
                     <tr key={n.id}>
-                      <td style={{ color: '#9ca3af', fontSize: '.8rem' }}>{(notasPag.page - 1) * PAGE_SIZE + index + 1}</td>
-                      <td>{n.fecha}</td>
-                      <td><span className="badge bg-primary">{n.tiposalida}</span></td>
-                      <td>{lugares.find((l: any) => l.id === n.id_lugarliberacion)?.nombre ?? '—'}</td>
-                      <td>{n.cantidad}</td>
-                      <td><span className={`badge ${n.activo ? 'bg-success' : 'bg-secondary'}`}>{n.activo ? 'Sí' : 'No'}</span></td>
-                      <td className="d-flex gap-1">
-                        <button className="btn btn-sm btn-outline-secondary" style={{ fontSize: '.72rem', padding: '2px 7px' }} title="Ver detalle" onClick={() => setDetail({ data: n, tipo: 'nota' })}>👁</button>
-                        {n.activo ? (
-                          <button className="btn btn-sm btn-outline-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={anularNota.isPending}
-                            onClick={() => setConfirm({ id: n.id, tipo: 'nota', accion: 'anular', mensaje: 'Se anulará esta nota de salida de Paratheresia.' })}>Anular</button>
-                        ) : (
-                          <button className="btn btn-sm btn-danger" style={{ fontSize: '.72rem', padding: '2px 8px' }} disabled={eliminarNota.isPending} title="Eliminar permanentemente"
-                            onClick={() => setConfirm({ id: n.id, tipo: 'nota', accion: 'eliminar', mensaje: 'Esto borrará la nota de forma permanente. No se puede deshacer.' })}>🗑</button>
-                        )}
+                      <td style={{ color: 'var(--vsp-text-muted)', fontSize: '.78rem' }}>
+                        {(notasPag.page - 1) * PAGE_SIZE + index + 1}
+                      </td>
+                      <td style={{ fontWeight: 500, color: 'var(--vsp-text-primary)' }}>{n.fecha}</td>
+                      <td><TipoBadge tipo={n.tiposalida} /></td>
+                      <td style={{ color: n.id_lugarliberacion ? 'var(--vsp-text-primary)' : 'var(--vsp-text-muted)' }}>
+                        {lugares.find(l => l.id === n.id_lugarliberacion)?.nombre ?? '—'}
+                      </td>
+                      <td>{n.cantidad.toLocaleString('es-PE')}</td>
+                      <td><Badge activo={n.activo} /></td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+                          <button
+                            className="vsp-action-btn vsp-action-btn--view"
+                            onClick={() => setDetail({ data: n, tipo: 'nota' })}
+                            title="Ver detalle"
+                          >👁 Ver</button>
+                          {n.activo ? (
+                            <button
+                              className="vsp-action-btn vsp-action-btn--anular"
+                              disabled={anularNota.isPending}
+                              onClick={() => setConfirm({
+                                id: n.id, tipo: 'nota', accion: 'anular',
+                                mensaje: 'Se anulará esta nota de salida de Paratheresia.',
+                              })}
+                            >Anular</button>
+                          ) : (
+                            <button
+                              className="vsp-action-btn vsp-action-btn--delete"
+                              disabled={eliminarNota.isPending}
+                              onClick={() => setConfirm({
+                                id: n.id, tipo: 'nota', accion: 'eliminar',
+                                mensaje: 'Esto borrará la nota de forma permanente. No se puede deshacer.',
+                              })}
+                            >🗑 Eliminar</button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
               }
             </tbody>
           </table>
-          <Pagination page={notasPag.page} total={notasPag.total} setPage={notasPag.setPage} />
+          <div style={{ padding: '0 4px 4px' }}>
+            <Pagination page={notasPag.page} total={notasPag.total} setPage={notasPag.setPage} />
+          </div>
         </div>
       )}
 
+      {/* ── Modal: Nuevo Registro de Producción ── */}
       {showModal && (
-        <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header"><h5 className="modal-title">Nuevo registro — Paratheresia</h5><button className="btn-close" onClick={() => setShowModal(false)} /></div>
+        <div className="vsp-overlay">
+          <div className="vsp-dialog">
+            <div className="vsp-dialog__head">
+              <h5 style={{ margin: 0, fontWeight: 600, fontSize: '.95rem' }}>🦟 Nuevo registro — Paratheresia</h5>
+              <button className="vsp-icon-btn" onClick={() => setShowModal(false)}>✕</button>
+            </div>
             <form onSubmit={handleSubmit}>
-              <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label><input type="date" className="form-control" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Cantidad (parejas) *</label><input type="number" step="0.01" className="form-control" value={form.cantidad} onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Unidad</label>
-                  <select className="form-select" value={form.id_unidad} onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}>
-                    <option value="">— Seleccionar —</option>{unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                  </select></div>
+              <div className="vsp-modal-body">
+                <div>
+                  <label className="vsp-form-label">Fecha *</label>
+                  <input
+                    type="date" className="vsp-input"
+                    value={form.fecha}
+                    onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="vsp-form-label">Cantidad (parejas) *</label>
+                  <input
+                    type="number" step="1" min="1" className="vsp-input"
+                    placeholder="Ej. 250"
+                    value={form.cantidad}
+                    onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="vsp-form-label">Unidad</label>
+                  <select
+                    className="vsp-input"
+                    value={form.id_unidad}
+                    onChange={e => setForm(f => ({ ...f, id_unidad: e.target.value }))}
+                  >
+                    <option value="">— Seleccionar unidad —</option>
+                    {unidades.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                  </select>
+                </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-vs btn" disabled={crear.isPending}>{crear.isPending ? 'Guardando...' : 'Guardar'}</button>
+              <div className="vsp-dialog__foot">
+                <button type="button" className="vsp-btn vsp-btn--ghost" onClick={() => setShowModal(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="vsp-btn vsp-btn--primary" disabled={crear.isPending}>
+                  {crear.isPending ? '⏳ Guardando...' : '✓ Guardar registro'}
+                </button>
               </div>
             </form>
-          </div></div>
+          </div>
         </div>
       )}
 
+      {/* ── Modal: Nota de Salida ── */}
       {showNotaModal && (
-        <div className="modal show d-block" style={{ background: 'rgba(0,0,0,.4)' }}>
-          <div className="modal-dialog"><div className="modal-content">
-            <div className="modal-header"><h5 className="modal-title">Nota de Salida — Paratheresia</h5><button className="btn-close" onClick={() => setShowNotaModal(false)} /></div>
+        <div className="vsp-overlay">
+          <div className="vsp-dialog">
+            <div className="vsp-dialog__head">
+              <h5 style={{ margin: 0, fontWeight: 600, fontSize: '.95rem' }}>📋 Nota de Salida — Paratheresia</h5>
+              <button className="vsp-icon-btn" onClick={() => setShowNotaModal(false)}>✕</button>
+            </div>
             <form onSubmit={handleNotaSubmit}>
-              <div className="modal-body d-flex flex-column gap-3">
-                <div><label className="form-label fw-semibold">Fecha *</label><input type="date" className="form-control" value={notaForm.fecha} onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Tipo de salida</label>
-                  <select className="form-select" value={notaForm.tiposalida} onChange={e => setNotaForm(f => ({ ...f, tiposalida: e.target.value }))}>
-                    <option value="Parasitacion">Parasitación</option><option value="Venta">Venta</option><option value="Liberacion">Liberación</option>
-                  </select></div>
-                <div><label className="form-label fw-semibold">Lugar de liberación</label>
-                  <select className="form-select" value={notaForm.id_lugarliberacion} onChange={e => setNotaForm(f => ({ ...f, id_lugarliberacion: e.target.value }))}>
-                    <option value="">— Seleccionar —</option>{lugares.map((l: any) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-                  </select></div>
-                <div><label className="form-label fw-semibold">Cantidad (parejas) *</label><input type="number" step="0.01" className="form-control" value={notaForm.cantidad} onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))} required /></div>
-                <div><label className="form-label fw-semibold">Descripción</label><textarea className="form-control" rows={2} value={notaForm.descripcion} onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
+              <div className="vsp-modal-body">
+
+                {/* Fecha */}
+                <div>
+                  <label className="vsp-form-label">Fecha *</label>
+                  <input
+                    type="date" className="vsp-input"
+                    value={notaForm.fecha}
+                    onChange={e => setNotaForm(f => ({ ...f, fecha: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                {/* Tipo de salida */}
+                <div>
+                  <label className="vsp-form-label">Tipo de salida</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 2 }}>
+                    {[
+                      { value: 'Parasitacion', icon: '🧬', label: 'Parasitación' },
+                      { value: 'Venta',        icon: '💰', label: 'Venta'        },
+                      { value: 'Liberacion',   icon: '📍', label: 'Liberación'   },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setNotaForm(f => ({
+                          ...f,
+                          tiposalida: opt.value,
+                          // limpiar lugar si cambia a otro tipo
+                          id_lugarliberacion: opt.value !== 'Liberacion' ? '' : f.id_lugarliberacion,
+                        }))}
+                        style={{
+                          padding: '10px 6px', borderRadius: 8, border: '1.5px solid',
+                          borderColor: notaForm.tiposalida === opt.value ? 'var(--vsp-primary)' : 'var(--vsp-border)',
+                          background: notaForm.tiposalida === opt.value ? 'var(--vsp-primary-soft)' : 'transparent',
+                          color: notaForm.tiposalida === opt.value ? 'var(--vsp-success)' : 'var(--vsp-text-secondary)',
+                          cursor: 'pointer', fontWeight: 600, fontSize: '.8rem',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                          transition: 'all .15s',
+                        }}
+                      >
+                        <span style={{ fontSize: 20 }}>{opt.icon}</span>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Lugar de liberación — solo cuando tipo === Liberacion */}
+                {notaForm.tiposalida === 'Liberacion' && (
+                  <div className="vsp-field-slide">
+                    <label className="vsp-form-label">
+                      📍 Lugar de liberación *
+                    </label>
+                    <select
+                      className="vsp-input"
+                      value={notaForm.id_lugarliberacion}
+                      onChange={e => setNotaForm(f => ({ ...f, id_lugarliberacion: e.target.value }))}
+                      required
+                    >
+                      <option value="">— Seleccionar lugar —</option>
+                      {lugares.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                    </select>
+                    <p style={{ margin: '5px 0 0', fontSize: '.75rem', color: 'var(--vsp-text-muted)' }}>
+                      Indica el campo o zona donde se liberarán las parejas.
+                    </p>
+                  </div>
+                )}
+
+                {/* Cantidad */}
+                <div>
+                  <label className="vsp-form-label">Cantidad (parejas) *</label>
+                  <input
+                    type="number" step="1" min="1" className="vsp-input"
+                    placeholder="Ej. 100"
+                    value={notaForm.cantidad}
+                    onChange={e => setNotaForm(f => ({ ...f, cantidad: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                {/* Descripción */}
+                <div>
+                  <label className="vsp-form-label">Descripción</label>
+                  <textarea
+                    className="vsp-input"
+                    style={{ resize: 'vertical', minHeight: 70 }}
+                    placeholder="Observaciones opcionales..."
+                    value={notaForm.descripcion}
+                    onChange={e => setNotaForm(f => ({ ...f, descripcion: e.target.value }))}
+                  />
+                </div>
+
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowNotaModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-vs btn" disabled={crearNota.isPending}>{crearNota.isPending ? 'Guardando...' : 'Guardar'}</button>
+              <div className="vsp-dialog__foot">
+                <button type="button" className="vsp-btn vsp-btn--ghost" onClick={() => setShowNotaModal(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="vsp-btn vsp-btn--primary" disabled={crearNota.isPending}>
+                  {crearNota.isPending ? '⏳ Guardando...' : '✓ Guardar nota'}
+                </button>
               </div>
             </form>
-          </div></div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
