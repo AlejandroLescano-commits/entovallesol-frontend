@@ -15,6 +15,7 @@ import ImportacionPage from '@/pages/importacion/ImportacionPage'
 import UsuariosPage from '@/pages/usuarios/UsuariosPage'
 import ConfiguracionPage from '@/pages/configuracion/ConfiguracionPage'
 import PrediccionPage from '@/pages/prediccion/PrediccionPage'
+import ProyeccionPage from '@/pages/proyeccion/ProyeccionPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="usuarios"                element={<UsuariosPage />} />
         <Route path="configuracion"           element={<ConfiguracionPage />} />
         <Route path="prediccion"              element={<PrediccionPage />} />
+        <Route path="proyeccion" element={<ProyeccionPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
