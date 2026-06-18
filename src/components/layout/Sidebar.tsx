@@ -17,6 +17,7 @@ const nav = [
   { to: '/importacion',             label: 'Importación',  icon: Upload },
   { to: '/usuarios',                label: 'Usuarios',     icon: Users },
   { to: '/configuracion',           label: 'Configuración',icon: Settings },
+  { to: '/proyeccion',              label: 'Proyección',    icon: TrendingUp },
 ]
 
 export default function Sidebar() {
