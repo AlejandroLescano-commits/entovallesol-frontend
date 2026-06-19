@@ -69,26 +69,76 @@ function ConfirmModal({ nombre, onConfirm, onCancel }: { nombre: string; onConfi
   )
 }
 
+/* ─── RolSelector (reutilizable) ──────────────────────────────────────────── */
+function RolSelector({ value, onChange }: { value: string; onChange: (r: RolKey) => void }) {
+  return (
+    <div className="vs-rol-selector">
+      {(Object.entries(ROL_CONFIG) as [RolKey, typeof ROL_CONFIG[RolKey]][]).map(([key, cfg]) => {
+        const isSelected = value === key
+        const selectedClass = isSelected
+          ? key === 'supervisor' ? 'selected-supervisor'
+          : key === 'admin' ? 'selected-admin'
+          : 'selected'
+          : ''
+        return (
+          <button
+            key={key}
+            type="button"
+            className={`vs-rol-option ${selectedClass}`}
+            onClick={() => onChange(key)}
+          >
+            <span className="rol-icon">{cfg.icon}</span>
+            <span className="rol-label">{cfg.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ─── Main ────────────────────────────────────────────────────────────────── */
 export default function UsuariosPage() {
   const { data: usuarios = [], isLoading } = useUsuarios()
-  const crear     = useCreateUsuario()
+  const crear      = useCreateUsuario()
   const actualizar = useUpdateUsuario()
-  const eliminar  = useDeleteUsuario()
-  const rol       = useAuthStore(s => s.user?.rol)
+  const eliminar   = useDeleteUsuario()
+  const rol        = useAuthStore(s => s.user?.rol)
 
-  const [showModal, setShowModal]   = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{ id: number; nombre: string } | null>(null)
-  const [showPass, setShowPass]     = useState(false)
-  const [form, setForm] = useState({ nombre: '', email: '', password: '', rol: 'operario' })
-
+  // Crear
+  const [showModal, setShowModal] = useState(false)
+  const [showPass, setShowPass]   = useState(false)
+  const [form, setForm] = useState({ nombre: '', email: '', password: '', rol: 'operario' as RolKey })
   const resetForm = () => setForm({ nombre: '', email: '', password: '', rol: 'operario' })
+
+  // Editar
+  const [editTarget, setEditTarget] = useState<any | null>(null)
+  const [showEditPass, setShowEditPass] = useState(false)
+  const [editForm, setEditForm] = useState({ nombre: '', email: '', rol: 'operario' as RolKey, password: '' })
+
+  const openEdit = (u: any) => {
+    setEditTarget(u)
+    setEditForm({ nombre: u.nombre, email: u.email, rol: u.rol, password: '' })
+    setShowEditPass(false)
+  }
+
+  // Eliminar
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; nombre: string } | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     crear.mutate(form, {
       onSuccess: () => { setShowModal(false); resetForm() },
     })
+  }
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const data: any = { nombre: editForm.nombre, email: editForm.email, rol: editForm.rol }
+    if (editForm.password) data.password = editForm.password
+    actualizar.mutate(
+      { id: editTarget.id, data },
+      { onSuccess: () => setEditTarget(null) }
+    )
   }
 
   const totalActivos   = usuarios.filter((u: any) => u.activo).length
@@ -155,13 +205,15 @@ export default function UsuariosPage() {
         .vs-input { width: 100%; padding: 8px 12px; font-size: .88rem; border: 1px solid var(--vs-border); border-radius: 8px; background: #fff; color: var(--vs-text-primary); transition: border-color .15s; box-sizing: border-box; }
         .vs-input:focus { outline: none; border-color: var(--vs-primary); box-shadow: 0 0 0 3px rgba(22,163,74,.1); }
         .vs-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-height: 65vh; overflow-y: auto; }
-        .vs-action-btn { padding: 4px 10px; border-radius: 6px; font-size: .75rem; font-weight: 500; border: 1px solid; cursor: pointer; transition: all .12s; display: inline-flex; align-items: center; gap: 4px; }
+        .vs-action-btn { padding: 4px 10px; border-radius: 6px; font-size: .75rem; font-weight: 500; border: 1px solid; cursor: pointer; transition: all .12s; display: inline-flex; align-items: center; gap: 4px; background: transparent; }
         .vs-action-btn:active { transform: scale(.96); }
-        .vs-action-btn--activate { border-color: #86efac; background: transparent; color: var(--vs-success); }
+        .vs-action-btn--activate { border-color: #86efac; color: var(--vs-success); }
         .vs-action-btn--activate:hover { background: var(--vs-success-soft); }
-        .vs-action-btn--deactivate { border-color: #fcd34d; background: transparent; color: var(--vs-warn); }
+        .vs-action-btn--deactivate { border-color: #fcd34d; color: var(--vs-warn); }
         .vs-action-btn--deactivate:hover { background: var(--vs-warn-soft); }
-        .vs-action-btn--delete { border-color: #fca5a5; background: transparent; color: var(--vs-danger); }
+        .vs-action-btn--edit { border-color: #93c5fd; color: #2563eb; }
+        .vs-action-btn--edit:hover { background: #eff6ff; }
+        .vs-action-btn--delete { border-color: #fca5a5; color: var(--vs-danger); }
         .vs-action-btn--delete:hover { background: var(--vs-danger-soft); }
         .vs-spinner { display: flex; justify-content: center; padding: 48px 0; }
         .vs-pass-wrap { position: relative; }
@@ -176,18 +228,90 @@ export default function UsuariosPage() {
         .vs-rol-option.selected-admin { border-color: #7c3aed; background: #ede9fe; }
         .vs-rol-option .rol-icon { font-size: 1.2rem; display: block; margin-bottom: 4px; }
         .vs-rol-option .rol-label { font-size: .75rem; font-weight: 600; color: var(--vs-text-secondary); }
+        .vs-hint { font-size: .75rem; color: var(--vs-text-muted); margin-top: 4px; }
       `}</style>
 
-      {/* Confirm eliminar */}
+      {/* ── Confirm eliminar ── */}
       {deleteTarget && (
         <ConfirmModal
           nombre={deleteTarget.nombre}
-          onConfirm={() => { eliminar.mutate(deleteTarget.id, { onSettled: () => setDeleteTarget(null) }) }}
+          onConfirm={() => eliminar.mutate(deleteTarget.id, { onSettled: () => setDeleteTarget(null) })}
           onCancel={() => setDeleteTarget(null)}
         />
       )}
 
-      {/* Encabezado */}
+      {/* ── Modal editar ── */}
+      {editTarget && (
+        <div className="vs-overlay">
+          <div className="vs-dialog">
+            <div className="vs-dialog__head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Avatar nombre={editTarget.nombre} rol={editTarget.rol} />
+                <h5 style={{ margin: 0, fontWeight: 600, fontSize: '.95rem' }}>Editar usuario</h5>
+              </div>
+              <button className="vs-icon-btn" onClick={() => setEditTarget(null)}>✕</button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div className="vs-modal-body">
+
+                <div>
+                  <label className="vs-form-label">Nombre completo *</label>
+                  <input
+                    className="vs-input"
+                    value={editForm.nombre}
+                    onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="vs-form-label">Correo electrónico *</label>
+                  <input
+                    type="email"
+                    className="vs-input"
+                    value={editForm.email}
+                    onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="vs-form-label">Nueva contraseña</label>
+                  <div className="vs-pass-wrap">
+                    <input
+                      type={showEditPass ? 'text' : 'password'}
+                      className="vs-input"
+                      placeholder="Dejar vacío para no cambiar"
+                      value={editForm.password}
+                      onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))}
+                    />
+                    <button type="button" className="vs-pass-toggle" onClick={() => setShowEditPass(v => !v)}>
+                      {showEditPass ? '🙈' : '👁'}
+                    </button>
+                  </div>
+                  <p className="vs-hint">Solo completa si deseas cambiar la contraseña.</p>
+                </div>
+
+                <div>
+                  <label className="vs-form-label">Rol *</label>
+                  <RolSelector value={editForm.rol} onChange={r => setEditForm(f => ({ ...f, rol: r }))} />
+                </div>
+
+              </div>
+              <div className="vs-dialog__foot">
+                <button type="button" className="vs-btn vs-btn--ghost" onClick={() => setEditTarget(null)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="vs-btn vs-btn--primary" disabled={actualizar.isPending}>
+                  {actualizar.isPending ? '⏳ Guardando...' : '✓ Guardar cambios'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Encabezado ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <h1 style={{ margin: 0, fontWeight: 700, fontSize: '1.4rem', color: 'var(--vs-text-primary)' }}>
@@ -202,7 +326,7 @@ export default function UsuariosPage() {
         </button>
       </div>
 
-      {/* Métricas */}
+      {/* ── Métricas ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
         {[
           { icon: '👥', label: 'Total usuarios',  value: usuarios.length,  color: '#16a34a' },
@@ -220,7 +344,7 @@ export default function UsuariosPage() {
         ))}
       </div>
 
-      {/* Tabla */}
+      {/* ── Tabla ── */}
       <div className="vs-card">
         {isLoading
           ? <div className="vs-spinner"><div className="spinner-border text-success" /></div>
@@ -268,6 +392,12 @@ export default function UsuariosPage() {
                             {u.activo ? '⏸ Desactivar' : '▶ Activar'}
                           </button>
                           <button
+                            className="vs-action-btn vs-action-btn--edit"
+                            onClick={() => openEdit(u)}
+                          >
+                            ✏️ Editar
+                          </button>
+                          <button
                             className="vs-action-btn vs-action-btn--delete"
                             onClick={() => setDeleteTarget({ id: u.id, nombre: u.nombre })}
                           >
@@ -284,7 +414,7 @@ export default function UsuariosPage() {
         }
       </div>
 
-      {/* Modal: Nuevo usuario */}
+      {/* ── Modal: Nuevo usuario ── */}
       {showModal && (
         <div className="vs-overlay">
           <div className="vs-dialog">
@@ -337,27 +467,7 @@ export default function UsuariosPage() {
 
                 <div>
                   <label className="vs-form-label">Rol *</label>
-                  <div className="vs-rol-selector">
-                    {(Object.entries(ROL_CONFIG) as [RolKey, typeof ROL_CONFIG[RolKey]][]).map(([key, cfg]) => {
-                      const isSelected = form.rol === key
-                      const selectedClass = isSelected
-                        ? key === 'supervisor' ? 'selected-supervisor'
-                        : key === 'admin' ? 'selected-admin'
-                        : 'selected'
-                        : ''
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`vs-rol-option ${selectedClass}`}
-                          onClick={() => setForm(f => ({ ...f, rol: key }))}
-                        >
-                          <span className="rol-icon">{cfg.icon}</span>
-                          <span className="rol-label">{cfg.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <RolSelector value={form.rol} onChange={r => setForm(f => ({ ...f, rol: r }))} />
                 </div>
 
               </div>
