@@ -27,6 +27,9 @@
     "recharts": "^2.12.7",
     "zod": "^3.23.8",
     "zustand": "^4.5.2"
+    "jspdf": "^3.x.x",
+"jspdf-autotable": "^5.x.x",
+"xlsx": "^0.18.x",
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.6",
