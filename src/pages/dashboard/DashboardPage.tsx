@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chart, registerables } from 'chart.js'
 import { useSitotroga, useTrichogramma, useGalleria, useParatheresia, useNotasSitodroga } from '@/hooks/useProduccion'
 import { useUsuarios } from '@/hooks/useUsuarios'
+import { exportarDashboardExcel, exportarDashboardPDF } from '@/utils/exportDashboard'
 
 Chart.register(...registerables)
 
@@ -11,6 +12,87 @@ const COLORS = {
   trichogramma: { main: '#378ADD', light: 'rgba(55,138,221,0.12)',  bg: '#E6F1FB', text: '#0C447C' },
   galleria:     { main: '#D85A30', light: 'rgba(216,90,48,0.12)',   bg: '#FAECE7', text: '#4A1B0C' },
   paratheresia: { main: '#7F77DD', light: 'rgba(127,119,221,0.12)', bg: '#EEEDFE', text: '#26215C' },
+}
+
+/* ── Tipos y helpers de fecha/vista ──────────────────────── */
+type Vista = 'dia' | 'mes' | 'anio'
+
+const toISODate = (d: Date) => d.toISOString().slice(0, 10)
+
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+function formatLabel(fecha: string, vista: Vista): string {
+  if (vista === 'dia') return fecha.slice(5)                 // MM-DD
+  if (vista === 'anio') return fecha                         // YYYY
+  const [y, m] = fecha.split('-')                            // mes: YYYY-MM -> "Ene 26"
+  return `${MESES_CORTOS[parseInt(m, 10) - 1] ?? m} ${y.slice(2)}`
+}
+
+/** Agrupa una lista de registros {fecha, cantidad} según la vista elegida, sumando cantidades. */
+function aggregateByPeriod(records: any[], vista: Vista, valueField = 'cantidad'): { fecha: string; cantidad: number }[] {
+  if (!records?.length) return []
+  if (vista === 'dia') {
+    return [...records]
+      .reverse()
+      .filter((r: any) => r.fecha)
+      .map((r: any) => ({ fecha: r.fecha, cantidad: r[valueField] || 0 }))
+  }
+  const map: Record<string, number> = {}
+  records.forEach((r: any) => {
+    if (!r.fecha) return
+    const key = vista === 'mes' ? r.fecha.slice(0, 7) : r.fecha.slice(0, 4)
+    map[key] = (map[key] || 0) + (r[valueField] || 0)
+  })
+  return Object.entries(map)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, cantidad]) => ({ fecha, cantidad }))
+}
+
+/* ── Persistencia del filtro (localStorage) ──────────────── */
+const FILTROS_STORAGE_KEY = 'dashboard_produccion_filtros_v1'
+
+type FiltrosGuardados = {
+  vista: Vista
+  rangoPersonalizado: boolean
+  fechaInicio: string
+  fechaFin: string
+}
+
+const VISTAS_VALIDAS: Vista[] = ['dia', 'mes', 'anio']
+const esFechaValida = (f: unknown): f is string => typeof f === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f)
+
+function cargarFiltrosGuardados(): FiltrosGuardados | null {
+  try {
+    const raw = localStorage.getItem(FILTROS_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!VISTAS_VALIDAS.includes(parsed?.vista)) return null
+    if (typeof parsed?.rangoPersonalizado !== 'boolean') return null
+    if (!esFechaValida(parsed?.fechaInicio) || !esFechaValida(parsed?.fechaFin)) return null
+    return parsed as FiltrosGuardados
+  } catch {
+    return null // localStorage no disponible o dato corrupto: se ignora sin romper la app
+  }
+}
+
+function guardarFiltros(filtros: FiltrosGuardados) {
+  try {
+    localStorage.setItem(FILTROS_STORAGE_KEY, JSON.stringify(filtros))
+  } catch {
+    // modo privado, cuota llena, etc. — no bloquea el uso del dashboard
+  }
+}
+
+function limpiarFiltrosGuardados() {
+  try {
+    localStorage.removeItem(FILTROS_STORAGE_KEY)
+  } catch {
+    // ignorar
+  }
+}
+
+function rangoPorDefecto(dias = 30) {
+  const d = new Date(); d.setDate(d.getDate() - dias); return toISODate(d)
 }
 
 /* ── Stat Card ───────────────────────────────────────────── */
@@ -69,18 +151,196 @@ function Legend({ items }: { items: { label: string; color: string }[] }) {
   )
 }
 
+/* ── Estado vacío (se superpone al canvas cuando no hay datos en el rango) ── */
+function SinDatos() {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 12, color: '#aaa', textAlign: 'center', padding: '0 1rem',
+    }}>
+      Sin datos en el periodo seleccionado
+    </div>
+  )
+}
+
+/* ── Selector de periodo (día/mes/año + rango personalizado) ── */
+const inputStyle: React.CSSProperties = {
+  fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid #e0e0da',
+  background: '#fff', color: '#333', outline: 'none',
+}
+
+function PeriodoSelector({
+  vista, onVistaChange, personalizado, onPersonalizadoChange,
+  fechaInicio, fechaFin, onFechaInicioChange, onFechaFinChange, onReset,
+  onExportExcel, onExportPDF, exportando,
+}: {
+  vista: Vista
+  onVistaChange: (v: Vista) => void
+  personalizado: boolean
+  onPersonalizadoChange: (v: boolean) => void
+  fechaInicio: string
+  fechaFin: string
+  onFechaInicioChange: (v: string) => void
+  onFechaFinChange: (v: string) => void
+  onReset: () => void
+  onExportExcel: () => void
+  onExportPDF: () => void
+  exportando: 'excel' | 'pdf' | null
+}) {
+  return (
+    <div style={{
+      background: '#fff', borderRadius: 12, border: '0.5px solid #e5e5e0',
+      padding: '0.85rem 1.25rem', display: 'flex', flexWrap: 'wrap',
+      alignItems: 'center', gap: 14, marginBottom: '1rem',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ fontSize: 12, color: '#888', fontWeight: 500 }}>Ver por</label>
+        <select
+          value={vista}
+          onChange={e => onVistaChange(e.target.value as Vista)}
+          style={inputStyle}
+        >
+          <option value="dia">Día</option>
+          <option value="mes">Mes</option>
+          <option value="anio">Año</option>
+        </select>
+      </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={personalizado}
+          onChange={e => onPersonalizadoChange(e.target.checked)}
+        />
+        Rango de fechas personalizado
+      </label>
+
+      {personalizado && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#888' }}>Desde</span>
+          <input
+            type="date"
+            value={fechaInicio}
+            max={fechaFin}
+            onChange={e => onFechaInicioChange(e.target.value)}
+            style={inputStyle}
+          />
+          <span style={{ fontSize: 12, color: '#888' }}>Hasta</span>
+          <input
+            type="date"
+            value={fechaFin}
+            min={fechaInicio}
+            max={toISODate(new Date())}
+            onChange={e => onFechaFinChange(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onReset}
+        style={{
+          marginLeft: 'auto', fontSize: 12, color: '#888', background: 'transparent',
+          border: '1px solid #e0e0da', borderRadius: 8, padding: '6px 12px', cursor: 'pointer',
+        }}
+      >
+        Restablecer
+      </button>
+
+      <button
+        type="button"
+        onClick={onExportExcel}
+        disabled={exportando !== null}
+        style={{
+          fontSize: 12, fontWeight: 500, color: '#1D6F3E', background: '#EAF3DE',
+          border: '1px solid #cfe6bd', borderRadius: 8, padding: '6px 12px',
+          cursor: exportando ? 'default' : 'pointer', opacity: exportando ? 0.6 : 1,
+        }}
+      >
+        {exportando === 'excel' ? 'Exportando…' : 'Exportar Excel'}
+      </button>
+
+      <button
+        type="button"
+        onClick={onExportPDF}
+        disabled={exportando !== null}
+        style={{
+          fontSize: 12, fontWeight: 500, color: '#A32D2D', background: '#FCEBEB',
+          border: '1px solid #f0c8c8', borderRadius: 8, padding: '6px 12px',
+          cursor: exportando ? 'default' : 'pointer', opacity: exportando ? 0.6 : 1,
+        }}
+      >
+        {exportando === 'pdf' ? 'Exportando…' : 'Exportar PDF'}
+      </button>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════════════════
    DASHBOARD PAGE
 ═══════════════════════════════════════════════════════════ */
 export default function DashboardPage() {
-  const { data: sitotroga    = [] } = useSitotroga()
-  const { data: trichogramma = [] } = useTrichogramma()
-  const { data: galleria     = [] } = useGalleria()
-  const { data: paratheresia = [] } = useParatheresia()
-  const { data: notasSit     = [] } = useNotasSitodroga()
+  /* ── Estado de vista y rango de fechas (se inicializa desde localStorage si existe) ── */
+  const [vista, setVista] = useState<Vista>(() => cargarFiltrosGuardados()?.vista ?? 'dia')
+  const [rangoPersonalizado, setRangoPersonalizado] = useState<boolean>(
+    () => cargarFiltrosGuardados()?.rangoPersonalizado ?? false
+  )
+  const [fechaInicioInput, setFechaInicioInput] = useState<string>(
+    () => cargarFiltrosGuardados()?.fechaInicio ?? rangoPorDefecto(30)
+  )
+  const [fechaFinInput, setFechaFinInput] = useState<string>(
+    () => cargarFiltrosGuardados()?.fechaFin ?? toISODate(new Date())
+  )
+
+  /* Persiste el filtro cada vez que cambia, para que sobreviva a recargas/cierres de pestaña */
+  useEffect(() => {
+    guardarFiltros({ vista, rangoPersonalizado, fechaInicio: fechaInicioInput, fechaFin: fechaFinInput })
+  }, [vista, rangoPersonalizado, fechaInicioInput, fechaFinInput])
+
+  /* Evita rangos inválidos: si el usuario mueve una fecha más allá de la otra, la otra se ajusta */
+  const handleFechaInicioChange = (v: string) => {
+    setFechaInicioInput(v)
+    if (v > fechaFinInput) setFechaFinInput(v)
+  }
+  const handleFechaFinChange = (v: string) => {
+    setFechaFinInput(v)
+    if (v < fechaInicioInput) setFechaInicioInput(v)
+  }
+
+  const handleReset = () => {
+    limpiarFiltrosGuardados()
+    setVista('dia')
+    setRangoPersonalizado(false)
+    setFechaInicioInput(rangoPorDefecto(30))
+    setFechaFinInput(toISODate(new Date()))
+  }
+
+  /* ── Exportación a Excel / PDF (usa exactamente los datos filtrados en pantalla) ── */
+  const [exportando, setExportando] = useState<'excel' | 'pdf' | null>(null)
+
+  /* Rango efectivo enviado al backend: personalizado si está activo,
+     o un rango por defecto razonable según la vista elegida. */
+  const params = useMemo(() => {
+    if (rangoPersonalizado) {
+      return { fecha_inicio: fechaInicioInput, fecha_fin: fechaFinInput }
+    }
+    const fin = new Date()
+    const inicio = new Date()
+    if (vista === 'dia') inicio.setDate(inicio.getDate() - 30)        // últimos 30 días
+    else if (vista === 'mes') inicio.setMonth(inicio.getMonth() - 11) // últimos 12 meses
+    else inicio.setFullYear(inicio.getFullYear() - 4)                 // últimos 5 años
+    return { fecha_inicio: toISODate(inicio), fecha_fin: toISODate(fin) }
+  }, [vista, rangoPersonalizado, fechaInicioInput, fechaFinInput])
+
+  const { data: sitotroga    = [] } = useSitotroga(params)
+  const { data: trichogramma = [] } = useTrichogramma(params)
+  const { data: galleria     = [] } = useGalleria(params)
+  const { data: paratheresia = [] } = useParatheresia(params)
+  const { data: notasSit     = [] } = useNotasSitodroga(params)
   const { data: usuarios     = [] } = useUsuarios()
 
-  /* Totales acumulados de producción */
+  /* Totales acumulados de producción (dentro del rango filtrado) */
   const totalSitotroga    = sitotroga.reduce((s: number, r: any)    => s + (r.cantidad || 0), 0)
   const totalTrichogramma = trichogramma.reduce((s: number, r: any) => s + (r.cantidad || 0), 0)
   const totalGalleria     = galleria.reduce((s: number, r: any)     => s + (r.cantidad || 0), 0)
@@ -92,7 +352,7 @@ export default function DashboardPage() {
   const lastGalleria     = galleria[0]
   const lastParatheresia = paratheresia[0]
 
-  /* Datos reales para el donut de salidas Sitotroga */
+  /* Datos reales para el donut de salidas Sitotroga (dentro del rango filtrado) */
   const donutTipos = ['T.exiguum', 'Infestación', 'T.pretiosum', 'Crysopas', 'Ventas']
   const donutData  = donutTipos.map(tipo =>
     (notasSit as any[])
@@ -107,6 +367,12 @@ export default function DashboardPage() {
     '#f59e0b',
   ]
 
+  /* Series agregadas según la vista (día / mes / año) */
+  const sitoAgg        = useMemo(() => aggregateByPeriod(sitotroga, vista),    [sitotroga, vista])
+  const triAgg         = useMemo(() => aggregateByPeriod(trichogramma, vista), [trichogramma, vista])
+  const galleriaAgg    = useMemo(() => aggregateByPeriod(galleria, vista),     [galleria, vista])
+  const paratheresiaAgg = useMemo(() => aggregateByPeriod(paratheresia, vista), [paratheresia, vista])
+
   /* refs para los 3 canvas */
   const refBar   = useRef<HTMLCanvasElement>(null)
   const refDonut = useRef<HTMLCanvasElement>(null)
@@ -115,20 +381,22 @@ export default function DashboardPage() {
   const chartDonut = useRef<Chart | null>(null)
   const chartLine  = useRef<Chart | null>(null)
 
+  const sinDatosBar = sitoAgg.length === 0 && triAgg.length === 0
+
   /* ── Gráfico 1: barras Sitotroga + línea Trichogramma ── */
   useEffect(() => {
-    if (!refBar.current || !sitotroga.length || !trichogramma.length) return
+    if (!refBar.current) return
     chartBar.current?.destroy()
+    chartBar.current = null
+    if (sinDatosBar) return
 
-    // El backend devuelve desc → invertimos para el gráfico (cronológico)
-    const sitoCrono = [...sitotroga].reverse()
-    const triCrono  = [...trichogramma].reverse()
+    const allKeys = Array.from(new Set([...sitoAgg.map(r => r.fecha), ...triAgg.map(r => r.fecha)])).sort()
+    const sitoMap = Object.fromEntries(sitoAgg.map(r => [r.fecha, r.cantidad]))
+    const triMap  = Object.fromEntries(triAgg.map(r => [r.fecha, r.cantidad / 10]))
 
-    const labels   = sitoCrono.map((r: any) => r.fecha?.slice(5))
-    const sitoVals = sitoCrono.map((r: any) => r.cantidad)
-    const triMap: Record<string, number> = {}
-    triCrono.forEach((r: any) => { triMap[r.fecha?.slice(5)] = r.cantidad / 10 })
-    const triVals = labels.map((l: string) => triMap[l] ?? null)
+    const labels   = allKeys.map(k => formatLabel(k, vista))
+    const sitoVals = allKeys.map(k => sitoMap[k] ?? null)
+    const triVals  = allKeys.map(k => triMap[k] ?? null)
 
     chartBar.current = new Chart(refBar.current, {
       data: {
@@ -177,17 +445,22 @@ export default function DashboardPage() {
     } as any)
 
     return () => { chartBar.current?.destroy() }
-  }, [sitotroga, trichogramma])
+  }, [sitoAgg, triAgg, vista, sinDatosBar])
 
-  /* ── Gráfico 2: donut salidas Sitotroga (datos reales) ── */
+  // Filtra solo tipos con cantidad > 0 para no mostrar sectores vacíos
+  const donutFiltrados = donutTipos
+    .map((label, i) => ({ label, value: donutData[i], color: donutColors[i] }))
+    .filter(d => d.value > 0)
+  const sinDatosDonut = donutFiltrados.length === 0
+
+  /* ── Gráfico 2: donut salidas Sitotroga (datos reales, dentro del rango) ── */
   useEffect(() => {
     if (!refDonut.current) return
     chartDonut.current?.destroy()
+    chartDonut.current = null
+    if (sinDatosDonut) return
 
-    // Filtra solo tipos con cantidad > 0 para no mostrar sectores vacíos
-    const filtrados = donutTipos
-      .map((label, i) => ({ label, value: donutData[i], color: donutColors[i] }))
-      .filter(d => d.value > 0)
+    const filtrados = donutFiltrados
 
     chartDonut.current = new Chart(refDonut.current, {
       type: 'doughnut',
@@ -212,33 +485,30 @@ export default function DashboardPage() {
     })
 
     return () => { chartDonut.current?.destroy() }
-  }, [notasSit])
+    // donutFiltrados se deriva de notasSit en cada render; usamos notasSit como dependencia estable
+  }, [notasSit, sinDatosDonut])
+
+  const sinDatosLine = galleriaAgg.length === 0 && paratheresiaAgg.length === 0
 
   /* ── Gráfico 3: líneas Galleria vs Paratheresia ─────── */
   useEffect(() => {
-    if (!refLine.current || !galleria.length || !paratheresia.length) return
+    if (!refLine.current) return
     chartLine.current?.destroy()
+    chartLine.current = null
+    if (sinDatosLine) return
 
-    const galleriaCrono    = [...galleria].reverse()
-    const paratheresiaCrono = [...paratheresia].reverse()
+    const gMap = Object.fromEntries(galleriaAgg.map(r => [r.fecha, r.cantidad / 10]))
+    const pMap = Object.fromEntries(paratheresiaAgg.map(r => [r.fecha, r.cantidad]))
 
-    const gMap: Record<string, number> = {}
-    galleriaCrono.forEach((r: any) => { gMap[r.fecha?.slice(5)] = r.cantidad / 10 })
-    const pMap: Record<string, number> = {}
-    paratheresiaCrono.forEach((r: any) => {
-      const key = r.fecha?.slice(5)
-      pMap[key] = (pMap[key] || 0) + r.cantidad
-    })
-
-    const allLabels = [...new Set([
-      ...galleriaCrono.map((r: any) => r.fecha?.slice(5)),
-      ...paratheresiaCrono.map((r: any) => r.fecha?.slice(5)),
-    ])].sort()
+    const allLabels = Array.from(new Set([
+      ...galleriaAgg.map(r => r.fecha),
+      ...paratheresiaAgg.map(r => r.fecha),
+    ])).sort()
 
     chartLine.current = new Chart(refLine.current, {
       type: 'line',
       data: {
-        labels: allLabels,
+        labels: allLabels.map(l => formatLabel(l, vista)),
         datasets: [
           {
             label: 'Galleria (unid./10)',
@@ -273,7 +543,54 @@ export default function DashboardPage() {
     })
 
     return () => { chartLine.current?.destroy() }
-  }, [galleria, paratheresia])
+  }, [galleriaAgg, paratheresiaAgg, vista, sinDatosLine])
+
+  const handleExportExcel = () => {
+    setExportando('excel')
+    try {
+      exportarDashboardExcel({
+        vista,
+        fechaInicio: params.fecha_inicio,
+        fechaFin: params.fecha_fin,
+        sitotroga, trichogramma, galleria, paratheresia, notasSit,
+        totales: {
+          sitotroga: totalSitotroga,
+          trichogramma: totalTrichogramma,
+          galleria: totalGalleria,
+          paratheresia: totalParatheresia,
+        },
+      })
+    } finally {
+      setExportando(null)
+    }
+  }
+
+  const handleExportPDF = () => {
+    setExportando('pdf')
+    try {
+      exportarDashboardPDF(
+        {
+          vista,
+          fechaInicio: params.fecha_inicio,
+          fechaFin: params.fecha_fin,
+          sitotroga, trichogramma, galleria, paratheresia, notasSit,
+          totales: {
+            sitotroga: totalSitotroga,
+            trichogramma: totalTrichogramma,
+            galleria: totalGalleria,
+            paratheresia: totalParatheresia,
+          },
+        },
+        {
+          bar: sinDatosBar ? null : chartBar.current?.toBase64Image() ?? null,
+          donut: sinDatosDonut ? null : chartDonut.current?.toBase64Image() ?? null,
+          line: sinDatosLine ? null : chartLine.current?.toBase64Image() ?? null,
+        }
+      )
+    } finally {
+      setExportando(null)
+    }
+  }
 
   /* ── Render ──────────────────────────────────────────── */
   return (
@@ -283,6 +600,22 @@ export default function DashboardPage() {
         <h1 className="vs-page-title mb-0">Dashboard</h1>
         <p className="text-muted" style={{ fontSize: '.85rem' }}>Resumen general de producción</p>
       </div>
+
+      {/* Selector de periodo */}
+      <PeriodoSelector
+        vista={vista}
+        onVistaChange={setVista}
+        personalizado={rangoPersonalizado}
+        onPersonalizadoChange={setRangoPersonalizado}
+        fechaInicio={fechaInicioInput}
+        fechaFin={fechaFinInput}
+        onFechaInicioChange={handleFechaInicioChange}
+        onFechaFinChange={handleFechaFinChange}
+        onReset={handleReset}
+        onExportExcel={handleExportExcel}
+        onExportPDF={handleExportPDF}
+        exportando={exportando}
+      />
 
       {/* KPI cards */}
       <div className="row g-3 mb-4">
@@ -314,6 +647,7 @@ export default function DashboardPage() {
             ]} />
             <div style={{ position: 'relative', width: '100%', height: 220 }}>
               <canvas ref={refBar} />
+              {sinDatosBar && <SinDatos />}
             </div>
           </Card>
         </div>
@@ -321,6 +655,7 @@ export default function DashboardPage() {
           <Card title="Salidas Sitotroga" badge="Acumulado" badgeColor={COLORS.sitotroga}>
             <div style={{ position: 'relative', width: '100%', height: 190 }}>
               <canvas ref={refDonut} />
+              {sinDatosDonut && <SinDatos />}
             </div>
             <Legend items={[
               { label: 'T.exiguum',   color: COLORS.sitotroga.main },
@@ -343,6 +678,7 @@ export default function DashboardPage() {
             ]} />
             <div style={{ position: 'relative', width: '100%', height: 180 }}>
               <canvas ref={refLine} />
+              {sinDatosLine && <SinDatos />}
             </div>
           </Card>
         </div>
